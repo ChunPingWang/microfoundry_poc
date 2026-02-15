@@ -12,17 +12,67 @@ MicroFoundry preserves the CloudFoundry developer and user experience (`cf push`
 
 All deployable from your development directory with a single `cf push`.
 
+## Two Interfaces: CLI and MCP
+
+MicroFoundry provides two ways to interact with the platform:
+
+```
+╭──────────────────────────────────────────────────────────────────╮
+│                        Developer                                 │
+╰───────────────┬──────────────────────────────┬───────────────────╯
+                │                              │
+        ┌───────▽───────┐              ┌───────▽───────┐
+        │   cf push     │              │  Claude Code  │
+        │   cf logs     │              │  Cursor, etc. │
+        │   cf bind     │              │  (AI Tools)   │
+        └───────┬───────┘              └───────┬───────┘
+                │                              │
+        ┌───────▽───────┐              ┌───────▽───────┐
+        │  MicroFoundry │              │  MicroFoundry │
+        │  CLI (cf)     │              │  MCP Server   │
+        └───────┬───────┘              └───────┬───────┘
+                │                              │
+                ╰──────────────┬───────────────╯
+                       ┌───────▽───────┐
+                       │  MicroFoundry │
+                       │  API Server   │
+                       └───────┬───────┘
+                               │
+                       ┌───────▽───────┐
+                       │  Kubernetes   │
+                       └───────────────┘
+```
+
+**CLI** — The traditional `cf push` experience for terminal users.
+
+**MCP Server** — MicroFoundry exposes itself as a [Model Context Protocol](https://modelcontextprotocol.io/) server, enabling AI tools (Claude Code, Cursor, Windsurf, etc.) to deploy, manage, and monitor applications directly. Developers working with AI assistants can push code, bind services, check logs, and manage routes without leaving their AI-powered workflow.
+
+MCP tools exposed by MicroFoundry include:
+
+| MCP Tool | Equivalent CF Command | Description |
+| --- | --- | --- |
+| `mf_push` | `cf push` | Deploy an application from source |
+| `mf_logs` | `cf logs` | Stream or fetch application logs |
+| `mf_bind_service` | `cf bind-service` | Bind a backing service to an app |
+| `mf_create_service` | `cf create-service` | Provision a backing service instance |
+| `mf_routes` | `cf routes` | List or manage application routes |
+| `mf_scale` | `cf scale` | Scale app instances or resources |
+| `mf_env` | `cf env` | View or set environment variables |
+| `mf_apps` | `cf apps` | List deployed applications |
+| `mf_delete` | `cf delete` | Remove a deployed application |
+
 ## Design Principles
 
 1. **CF UX, cloud-native infra** — Keep `cf push`, `cf bind-service`, `cf logs` as the developer interface. Replace the underlying machinery with CSP-managed services and Kubernetes.
 2. **No custom infrastructure where managed services exist** — App parameters go to AWS Secrets Manager / GCP Secret Manager / Azure Key Vault instead of a custom config server. Logs flow through lightweight collectors to cloud-native backends instead of Loggregator.
 3. **Multi-cloud, K8s-only runtime** — Target EKS, GKE, AKS, ECS, and on-premise Kubernetes. No VM-based deployment.
 4. **API Gateway as the routing layer** — Replace Gorouter with pluggable API gateways (Kong, Nginx, AWS API Gateway) for endpoint access, rate limiting, and authentication.
+5. **AI-native platform access** — Expose the full platform as an MCP server so AI development tools can deploy and manage workloads natively.
 
 ## Architecture
 
 | CF Component | MicroFoundry Equivalent | Rationale |
-|---|---|---|
+| --- | --- | --- |
 | Diego Cell | Kubernetes Pod | K8s is the universal container orchestrator |
 | Gorouter | API Gateway (Kong / Nginx / AWS API GW) | Pluggable, CSP-native routing with richer features |
 | Cloud Controller | MicroFoundry API Server (Go) | Lightweight API that talks to K8s API directly |
@@ -41,18 +91,27 @@ See [docs/cloudfoundry-architecture.md](docs/cloudfoundry-architecture.md) for t
 For local development, MicroFoundry runs on **Docker Desktop Kubernetes** with the domain `cf-local.dev`:
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Docker Desktop Kubernetes                      │
-│                                                 │
-│  ┌──────────────┐    ┌───────────────────────┐  │
-│  │ Ingress      │    │ myapp.cf-local.dev    │  │
-│  │ Controller   │───▶│ (K8s Deployment)      │  │
-│  │ (Kong/Nginx) │    └───────────────────────┘  │
-│  │              │    ┌───────────────────────┐  │
-│  │ *.cf-local   │    │ mcp-server.cf-local   │  │
-│  │   .dev       │───▶│   .dev                │  │
-│  └──────────────┘    └───────────────────────┘  │
-└─────────────────────────────────────────────────┘
+╭───────────────────────────────────────────────────────────────╮
+│  Docker Desktop Kubernetes                                    │
+│                                                               │
+│  ┌─────────────────┐       ┌────────────────────────────┐     │
+│  │                 │       │  myapp.cf-local.dev        │     │
+│  │  Ingress        ├──────▶│  (K8s Deployment)          │     │
+│  │  Controller     │       └────────────────────────────┘     │
+│  │  (Kong/Nginx)   │       ┌────────────────────────────┐     │
+│  │                 │       │  api.cf-local.dev          │     │
+│  │  *.cf-local.dev ├──────▶│  (MCP Server Deployment)   │     │
+│  │                 │       └────────────────────────────┘     │
+│  │                 │       ┌────────────────────────────┐     │
+│  │                 │       │  agent.cf-local.dev        │     │
+│  │                 ├──────▶│  (AI Agent Deployment)     │     │
+│  └─────────────────┘       └────────────────────────────┘     │
+│                                                               │
+│  ┌─────────────────┐       ┌────────────────────────────┐     │
+│  │  MicroFoundry   │       │  Prometheus + Grafana      │     │
+│  │  API Server     │       │  Fluent Bit + Loki         │     │
+│  └─────────────────┘       └────────────────────────────┘     │
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 - **Base domain**: `cf-local.dev`
@@ -64,13 +123,14 @@ When deploying to cloud (EKS/GKE/AKS), the domain switches to a real FQDN with p
 
 ## Tech Stack
 
-- **Go** — API server, CLI, orchestration, K8s controllers
+- **Go** — API server, CLI, MCP server, K8s controllers
 - **Rust** — Performance-critical runtime components (future)
 - **Kubernetes** — Application runtime and orchestration
 - **Open Service Broker API** — Backing service integration
 - **Prometheus + Grafana** — Metrics and monitoring
 - **Fluent Bit + Loki** — Log collection and aggregation
 - **Cloud Native Buildpacks** — Source-to-container builds
+- **Model Context Protocol** — AI tool integration interface
 
 ## Project Structure
 
