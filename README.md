@@ -1,113 +1,85 @@
 # MicroFoundry
 
-A micro CloudFoundry for Kubernetes with AI-powered development agents.
+A micro CloudFoundry for Kubernetes.
 
-MicroFoundry brings the CloudFoundry developer experience to Kubernetes, supporting:
-- **Application Runtime**: Docker Desktop K8s, EKS, GKE, AKS, native K8s
-- **Backing Services**: AWS RDS, Google BigQuery, and more via service-bind
-- **Network Services**: AWS API Gateway, Kong, Nginx, and other API gateways
-- **Built with**: Go and Rust
+MicroFoundry brings the CloudFoundry developer experience — `cf push`, service binding, route management — to Kubernetes, without the complexity of a full CF deployment.
 
-## Agent Pipeline
+## Features
 
-MicroFoundry includes an AI-powered development pipeline (`mf` CLI) that automates Epic-to-PR workflows using 5 specialized agents:
+- **Application Runtime**: Deploy apps to Kubernetes (Docker Desktop, EKS, GKE, AKS, native K8s)
+- **Service Binding**: Bind backing services (AWS RDS, Google BigQuery, etc.) via Open Service Broker API
+- **Network Services**: Integrate API gateways (Kong, Nginx, AWS API Gateway) as routing layer
+- **Multi-Tenancy**: Organizations, spaces, and roles mapped to K8s namespaces and RBAC
+- **Buildpack Support**: Cloud Native Buildpacks (CNB/Paketo) for source-to-container
 
-| Agent | Role | Output |
-|-------|------|--------|
-| **Analyzer** | Analyzes CF codebase, creates detailed implementation plan | GitHub Issue |
-| **Data Engineer** | Recommends data structures, schemas, API types | Issue Comment |
-| **Product Designer** | Assesses UI needs, generates HTML mockups | Issue Comment |
-| **Developer** | Writes code, builds, deploys to K8s, tests | Pull Request |
-| **Reviewer** | License, security, performance, cost, sizing checks | PR Review |
+## Architecture
 
-## Quick Start
+MicroFoundry replaces CloudFoundry's BOSH/Diego infrastructure with Kubernetes-native equivalents:
 
-### Prerequisites
-- Go 1.23+
-- Docker Desktop with Kubernetes enabled
-- GitHub CLI (`gh`) authenticated
-- Anthropic API key
+| CF Component | MicroFoundry Equivalent |
+|-------------|------------------------|
+| Diego Cell | Kubernetes Pod |
+| Gorouter | Ingress Controller (Kong/Nginx) |
+| Cloud Controller | MicroFoundry API Server (Go) |
+| UAA | K8s RBAC / Dex / Keycloak |
+| Service Broker | OSBAPI-compatible broker |
+| Blobstore | S3 / GCS / MinIO |
+| Loggregator | Fluentd + Loki / native K8s logging |
 
-### Build
-```bash
-make build
-```
+See [docs/cloudfoundry-architecture.md](docs/cloudfoundry-architecture.md) for the full CF architecture reference.
 
-### Configure
-```bash
-# Set your Anthropic API key
-export ANTHROPIC_API_KEY=sk-ant-...
+## Tech Stack
 
-# Or use the config command
-./bin/mf config set anthropic.api_key sk-ant-...
-```
-
-### Run Full Pipeline
-```bash
-mf epic "Implement service binding for AWS RDS" \
-    --description "Add service-bind mechanism for AWS RDS backing services"
-```
-
-### Run Individual Agents
-```bash
-# Analyzer only
-mf analyze "Implement RDS service binding" -d "..."
-
-# Data Engineer on existing issue
-mf data-engineer --issue 42
-
-# Designer on existing issue
-mf design --issue 42
-
-# Developer on existing issue
-mf develop --issue 42 --branch epic/implement-rds-service-binding
-
-# Reviewer on existing PR
-mf review --pr 43
-```
+- **Go** — API server, CLI, orchestration, K8s controllers
+- **Rust** — Performance-critical runtime components (future)
+- **Kubernetes** — Application runtime and orchestration
+- **Open Service Broker API** — Backing service integration
 
 ## Project Structure
 
 ```
 microfoundry/
-├── cmd/mf/              # CLI entry point (Cobra)
-├── pkg/
-│   ├── agents/          # Agent implementations
-│   │   ├── analyzer/    # Epic analysis → GitHub Issue
-│   │   ├── dataengineer/# Data structure recommendations
-│   │   ├── designer/    # UI assessment & HTML mockups
-│   │   ├── developer/   # Code → Build → Deploy → PR
-│   │   └── reviewer/    # License/Security/Perf review
-│   ├── claude/          # Claude API client (anthropic-sdk-go)
-│   ├── github/          # GitHub operations (gh CLI wrapper)
-│   ├── k8s/             # Kubernetes deploy helpers
-│   ├── config/          # Configuration management (Viper)
-│   └── codebase/        # CF reference repo scanner
-├── configs/             # Configuration files
-├── deploy/k8s/          # Kubernetes manifests
+├── cmd/                    # CLI entry points
+├── pkg/                    # Go packages
+│   ├── config/             # Configuration management
+│   ├── github/             # GitHub integration
+│   └── k8s/                # Kubernetes helpers
+├── deploy/k8s/             # Kubernetes manifests
+│   ├── base/               # Base manifests
+│   └── overlays/           # Kustomize overlays (local, EKS, GKE, AKS)
+├── docs/                   # Architecture documentation
+├── configs/                # Configuration files
 ├── Makefile
-└── Dockerfile
+├── Dockerfile
+└── CLAUDE.md               # Development agent workflow
 ```
 
-## Configuration
+## Development
 
-Configuration is loaded from (highest to lowest precedence):
-1. CLI flags
-2. Environment variables (`MF_*`, `ANTHROPIC_API_KEY`)
-3. `~/.mf/config.yaml`
-4. `./configs/mf.yaml`
+### Prerequisites
 
-See [configs/mf.example.yaml](configs/mf.example.yaml) for all options.
+- Go 1.23+
+- Docker Desktop with Kubernetes enabled
+- GitHub CLI (`gh`) authenticated
+- kubectl
 
-## Workflow
+### Build
 
-1. User runs `mf epic "Feature Title" -d "Description"`
-2. **Analyzer** scans CF reference repos, uses Claude with extended thinking, creates GitHub Issue + branch
-3. **Data Engineer** reads the Issue, recommends data structures, posts as comment
-4. **Product Designer** assesses UI needs, generates HTML mockups if needed
-5. **Developer** reads all context, writes code via Claude tool-calling loop, builds, deploys, creates PR
-6. **Reviewer** checks license compliance, security, performance, cost, sizing; posts review
-7. Human reviews and merges via squash merge
+```bash
+make build
+```
+
+### Development Workflow
+
+This project uses **Claude Code development agents** defined in [CLAUDE.md](CLAUDE.md). When an Epic is requested, Claude executes 5 sequential agents:
+
+1. **Analyzer** — Creates GitHub Issue with detailed implementation plan
+2. **Data Engineer** — Posts data structure recommendations on the Issue
+3. **Product Designer** — Assesses UI needs, posts mockups if needed
+4. **Developer** — Writes code, builds, tests, creates Pull Request
+5. **Reviewer** — Reviews PR for license, security, performance, cost
+
+All work is tracked through GitHub Issues and PRs with squash merge to `main`.
 
 ## License
 

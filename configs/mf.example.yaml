@@ -1,9 +1,3 @@
-anthropic:
-  api_key: "${ANTHROPIC_API_KEY}"
-  model: "claude-sonnet-4-5-20250929"
-  max_tokens: 8192
-  thinking_budget: 10000
-
 github:
   owner: "younjinjeong"
   repo: "microfoundry"
@@ -11,31 +5,3 @@ github:
 kubernetes:
   context: "docker-desktop"
   namespace: "microfoundry"
-
-pipeline:
-  stop_on_failure: true
-  ref_codebases:
-    - "./cli"
-    - "./cf-deployment"
-
-agents:
-  analyzer:
-    enabled: true
-  data_engineer:
-    enabled: true
-  designer:
-    enabled: true
-    skip_if_no_ui: true
-  developer:
-    enabled: true
-    build_container: true
-    deploy_to_k8s: true
-    run_tests: true
-  reviewer:
-    enabled: true
-    checks:
-      license: true
-      security: true
-      performance: true
-      cost: true
-      sizing: true
