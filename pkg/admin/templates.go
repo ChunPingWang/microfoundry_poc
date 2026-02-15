@@ -22,11 +22,13 @@ func staticFS() http.FileSystem {
 }
 
 type TemplateRenderer struct {
-	templates *template.Template
+	base     *template.Template
+	pages    map[string]*template.Template
+	partials map[string]*template.Template
 }
 
-func NewTemplateRenderer() *TemplateRenderer {
-	funcMap := template.FuncMap{
+func templateFuncs() template.FuncMap {
+	return template.FuncMap{
 		"stateColor": func(state string) string {
 			switch strings.ToLower(state) {
 			case "started", "running":
@@ -114,29 +116,86 @@ func NewTemplateRenderer() *TemplateRenderer {
 			return d
 		},
 	}
+}
 
-	tmpl := template.Must(
-		template.New("").Funcs(funcMap).ParseFS(
+func NewTemplateRenderer() *TemplateRenderer {
+	funcs := templateFuncs()
+
+	// Parse base templates: layout, partials, tabs, and shared inline partials
+	// (app_row, app_instances, scale_form don't define "content" so no conflict)
+	base := template.Must(
+		template.New("").Funcs(funcs).ParseFS(
 			templateFiles,
-			"static/templates/*.html",
+			"static/templates/layout.html",
+			"static/templates/app_row.html",
+			"static/templates/app_instances.html",
+			"static/templates/scale_form.html",
 			"static/templates/partials/*.html",
 			"static/templates/tabs/*.html",
 		),
 	)
 
-	return &TemplateRenderer{templates: tmpl}
+	// Parse each full-page template by cloning base and adding the page.
+	// This ensures each page's {{define "content"}} doesn't conflict.
+	pageFiles := []string{
+		"dashboard.html",
+		"apps.html",
+		"app_detail.html",
+		"config.html",
+		"services.html",
+		"secrets.html",
+		"users.html",
+	}
+
+	pages := make(map[string]*template.Template, len(pageFiles)+3)
+	for _, name := range pageFiles {
+		clone := template.Must(base.Clone())
+		pages[name] = template.Must(clone.ParseFS(
+			templateFiles,
+			"static/templates/"+name,
+		))
+	}
+	// Non-layout partials can also be rendered as pages (for HTMX row updates)
+	pages["app_row.html"] = base
+	pages["app_instances.html"] = base
+	pages["scale_form.html"] = base
+
+	// Partials: tab templates + inline partials are all in base
+	partials := map[string]*template.Template{
+		"app_row.html":       base,
+		"app_instances.html": base,
+		"scale_form.html":    base,
+		"tab_overview.html":  base,
+		"tab_instances.html": base,
+		"tab_config.html":    base,
+		"tab_services.html":  base,
+		"tab_routes.html":    base,
+		"tab_logs.html":      base,
+	}
+
+	return &TemplateRenderer{base: base, pages: pages, partials: partials}
 }
 
 func (tr *TemplateRenderer) Render(w http.ResponseWriter, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tr.templates.ExecuteTemplate(w, name, data); err != nil {
+	tmpl, ok := tr.pages[name]
+	if !ok {
+		http.Error(w, fmt.Sprintf("template not found: %s", name), http.StatusInternalServerError)
+		return
+	}
+	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, fmt.Sprintf("template error: %v", err), http.StatusInternalServerError)
 	}
 }
 
 func (tr *TemplateRenderer) RenderPartial(w http.ResponseWriter, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tr.templates.ExecuteTemplate(w, name, data); err != nil {
+	tmpl, ok := tr.partials[name]
+	if !ok {
+		http.Error(w, fmt.Sprintf("partial not found: %s", name), http.StatusInternalServerError)
+		return
+	}
+	if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, fmt.Sprintf("template error: %v", err), http.StatusInternalServerError)
 	}
 }
