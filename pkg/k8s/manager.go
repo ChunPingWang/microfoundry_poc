@@ -85,12 +85,18 @@ func (cm *ClientManager) GetActive() string {
 }
 
 // ListClusters returns info for all registered clusters.
+// Copies config under read-lock, then makes network calls without holding the lock.
 func (cm *ClientManager) ListClusters(ctx context.Context) []models.ClusterInfo {
 	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+	configs := make(map[string]config.ClusterConfig, len(cm.configs))
+	active := cm.active
+	for id, cfg := range cm.configs {
+		configs[id] = cfg
+	}
+	cm.mu.RUnlock()
 
 	var infos []models.ClusterInfo
-	for id, cfg := range cm.configs {
+	for id, cfg := range configs {
 		info := models.ClusterInfo{
 			ID:        id,
 			Name:      cfg.Name,
@@ -100,12 +106,12 @@ func (cm *ClientManager) ListClusters(ctx context.Context) []models.ClusterInfo 
 			Namespace: cfg.Namespace,
 			Domain:    cfg.Domain,
 			Enabled:   cfg.Enabled,
-			IsActive:  id == cm.active,
+			IsActive:  id == active,
 			Status:    "disconnected",
 		}
 
-		// Try to get live status
-		if client, ok := cm.clients[id]; ok {
+		// GetClient has its own proper locking for lazy initialization
+		if client, err := cm.GetClient(id); err == nil {
 			info.Status = "connected"
 			if names, err := client.ListApps(ctx); err == nil {
 				info.AppCount = len(names)
@@ -117,23 +123,8 @@ func (cm *ClientManager) ListClusters(ctx context.Context) []models.ClusterInfo 
 				info.Version = ver.GitVersion
 			}
 		} else {
-			// Try creating the client to check connectivity
-			if c, err := NewClient(cfg.Context, cfg.Namespace, cfg.Domain); err == nil {
-				cm.clients[id] = c
-				info.Status = "connected"
-				if ver, err := c.Clientset.Discovery().ServerVersion(); err == nil {
-					info.Version = ver.GitVersion
-				}
-				if nodes, err := c.Clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{}); err == nil {
-					info.NodeCount = len(nodes.Items)
-				}
-				if names, err := c.ListApps(ctx); err == nil {
-					info.AppCount = len(names)
-				}
-			} else {
-				info.Status = "error"
-				info.StatusMsg = err.Error()
-			}
+			info.Status = "error"
+			info.StatusMsg = err.Error()
 		}
 
 		infos = append(infos, info)
@@ -181,6 +172,8 @@ func (cm *ClientManager) GetClusterDetail(ctx context.Context, clusterID string)
 	nodes, err := client.Clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err == nil {
 		detail.NodeCount = len(nodes.Items)
+		var totalCPUMillis int64
+		var totalMemBytes int64
 		for _, node := range nodes.Items {
 			roles := "worker"
 			if _, ok := node.Labels["node-role.kubernetes.io/control-plane"]; ok {
@@ -210,17 +203,24 @@ func (cm *ClientManager) GetClusterDetail(ctx context.Context, clusterID string)
 			}
 			detail.Nodes = append(detail.Nodes, ni)
 
-			// Aggregate resources
+			// Aggregate resources across all nodes
 			cap := node.Status.Capacity
 			if cpu, ok := cap["cpu"]; ok {
-				detail.ResourceUsage.CPUCapacity = cpu.String()
+				totalCPUMillis += cpu.MilliValue()
 			}
 			if mem, ok := cap["memory"]; ok {
-				detail.ResourceUsage.MemoryCapacity = mem.String()
+				totalMemBytes += mem.Value()
 			}
 			if pods, ok := cap["pods"]; ok {
 				detail.ResourceUsage.PodCapacity += int(pods.Value())
 			}
+		}
+		// Format aggregated totals
+		if totalCPUMillis > 0 {
+			detail.ResourceUsage.CPUCapacity = fmt.Sprintf("%dm", totalCPUMillis)
+		}
+		if totalMemBytes > 0 {
+			detail.ResourceUsage.MemoryCapacity = fmt.Sprintf("%dMi", totalMemBytes/(1024*1024))
 		}
 	}
 

@@ -2,23 +2,23 @@ package admin
 
 import (
 	"net/http"
+	"regexp"
 
 	"github.com/younjinjeong/microfoundry/pkg/config"
 )
+
+// validClusterID restricts cluster names to safe alphanumeric characters.
+var validClusterID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,62}$`)
 
 // ClustersListHandler renders the clusters page with all registered clusters.
 func (s *Server) ClustersListHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	clusters := s.clientManager.ListClusters(ctx)
 
-	data := PageData{
-		Title:   "Clusters",
-		Version: s.version,
-		Active:  "clusters",
-		Content: map[string]any{
-			"Clusters":      clusters,
-			"ActiveCluster": s.clientManager.GetActive(),
-		},
+	data := s.pageData("Clusters", "clusters")
+	data.Content = map[string]any{
+		"Clusters":      clusters,
+		"ActiveCluster": s.clientManager.GetActive(),
 	}
 	s.templates.Render(w, "clusters.html", data)
 }
@@ -34,12 +34,8 @@ func (s *Server) ClusterDetailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := PageData{
-		Title:   detail.Name,
-		Version: s.version,
-		Active:  "clusters",
-		Content: detail,
-	}
+	data := s.pageData(detail.Name, "clusters")
+	data.Content = detail
 	s.templates.Render(w, "cluster_detail.html", data)
 }
 
@@ -52,16 +48,15 @@ func (s *Server) SetActiveClusterHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Set cookie so the active cluster persists across browser sessions
 	http.SetCookie(w, &http.Cookie{
 		Name:     "mf-cluster",
 		Value:    id,
 		Path:     "/",
+		MaxAge:   30 * 24 * 60 * 60, // 30 days
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// If HTMX request, redirect via HX-Redirect header
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", "/clusters")
 		w.WriteHeader(http.StatusOK)
@@ -81,6 +76,10 @@ func (s *Server) AddClusterHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.FormValue("name")
 	if id == "" {
 		http.Error(w, "Cluster name is required", http.StatusBadRequest)
+		return
+	}
+	if !validClusterID.MatchString(id) {
+		http.Error(w, "Invalid cluster name: must be alphanumeric with .-_: allowed, max 63 chars", http.StatusBadRequest)
 		return
 	}
 
@@ -104,7 +103,6 @@ func (s *Server) AddClusterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If HTMX request, redirect via HX-Redirect header
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", "/clusters")
 		w.WriteHeader(http.StatusOK)

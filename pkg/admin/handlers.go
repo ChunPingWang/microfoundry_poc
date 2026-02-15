@@ -178,8 +178,8 @@ func (s *Server) ScaleAppHandler(w http.ResponseWriter, r *http.Request) {
 
 	instancesStr := r.FormValue("instances")
 	instances, err := strconv.Atoi(instancesStr)
-	if err != nil || instances < 0 {
-		http.Error(w, "Invalid instance count", http.StatusBadRequest)
+	if err != nil || instances < 0 || instances > 20 {
+		http.Error(w, "instances must be between 0 and 20", http.StatusBadRequest)
 		return
 	}
 
