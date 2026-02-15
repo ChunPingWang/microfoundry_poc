@@ -24,6 +24,7 @@ func main() {
 		logsCmd(),
 		deleteCmd(),
 		scaleCmd(),
+		adminCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

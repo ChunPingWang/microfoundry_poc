@@ -1,0 +1,23 @@
+{{define "users.html"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+<div class="bg-white rounded-lg shadow p-12 text-center">
+    <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+    </svg>
+    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 mb-4">
+        Coming Soon
+    </span>
+    <h3 class="text-xl font-bold text-gray-900 mt-2">Users & Organizations</h3>
+    <p class="text-gray-500 mt-2 max-w-md mx-auto">
+        Manage organizations, spaces, and user roles.
+        MicroFoundry maps CF's org/space model to Kubernetes namespaces
+        with RBAC-based access control.
+    </p>
+    <div class="mt-6 text-sm text-gray-400">
+        <p>Equivalent to: cf orgs, cf org-users, cf set-org-role, cf create-space</p>
+    </div>
+</div>
+{{end}}
