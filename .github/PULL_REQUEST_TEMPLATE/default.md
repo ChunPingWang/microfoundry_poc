@@ -16,10 +16,8 @@ Resolves #<!-- issue number -->
 - [ ] Docker image builds (if applicable)
 - [ ] Manual verification: <!-- describe -->
 
-## Agent Review Checklist
+## Review Checklist
 
 - [ ] License compliance checked
 - [ ] Security review completed
 - [ ] Performance assessed
-- [ ] Cost effectiveness reviewed
-- [ ] Resource right-sizing verified

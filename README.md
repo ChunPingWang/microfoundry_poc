@@ -88,7 +88,7 @@ microfoundry/
 ├── configs/                # Configuration files
 ├── Makefile
 ├── Dockerfile
-└── CLAUDE.md               # Development agent workflow
+└── LICENSE
 ```
 
 ## Development
@@ -105,18 +105,6 @@ microfoundry/
 ```bash
 make build
 ```
-
-### Development Workflow
-
-This project uses **Claude Code development agents** defined in [CLAUDE.md](CLAUDE.md). When an Epic is requested, Claude executes 5 sequential agents:
-
-1. **Analyzer** — Creates GitHub Issue with detailed implementation plan
-2. **Data Engineer** — Posts data structure recommendations on the Issue
-3. **Product Designer** — Assesses UI needs, posts mockups if needed
-4. **Developer** — Writes code, builds, tests, creates Pull Request
-5. **Reviewer** — Reviews PR for license, security, performance, cost
-
-All work is tracked through GitHub Issues and PRs with squash merge to `main`.
 
 ## License
 
