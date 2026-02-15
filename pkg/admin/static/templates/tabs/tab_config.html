@@ -1,0 +1,100 @@
+{{define "tab_config.html"}}
+<div class="space-y-6">
+    <!-- Environment Variables -->
+    <div>
+        <h4 class="text-sm font-medium text-gray-500 mb-3">Environment Variables</h4>
+        {{if .Env}}
+        <div class="bg-gray-50 rounded-lg overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Key</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {{range $key, $val := .Env}}
+                    <tr>
+                        <td class="px-4 py-2 text-sm font-mono text-gray-700">{{$key}}</td>
+                        <td class="px-4 py-2 text-sm font-mono text-gray-900">
+                            {{if isSensitive $key}}
+                            <span class="env-masked" data-value="{{$val}}">
+                                <span class="mask-text">&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;</span>
+                                <button onclick="toggleEnvValue(this)" class="ml-2 text-xs text-blue-600 hover:text-blue-800">Show</button>
+                            </span>
+                            {{else}}
+                            {{$val}}
+                            {{end}}
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <p class="text-sm text-gray-400">No environment variables configured</p>
+        {{end}}
+    </div>
+
+    <!-- Resource Limits -->
+    <div>
+        <h4 class="text-sm font-medium text-gray-500 mb-3">Resource Limits</h4>
+        <div class="bg-gray-50 rounded-lg p-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <p class="text-xs text-gray-500">Memory Request</p>
+                    <p class="text-sm font-medium text-gray-900">{{memFmt .MemoryMB}}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">Memory Limit</p>
+                    <p class="text-sm font-medium text-gray-900">{{memFmt .MemoryMB}}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">CPU Request</p>
+                    <p class="text-sm font-medium text-gray-900">{{if .CPUMillis}}{{.CPUMillis}}m{{else}}-{{end}}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">CPU Limit</p>
+                    <p class="text-sm font-medium text-gray-900">-</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Labels -->
+    <div>
+        <h4 class="text-sm font-medium text-gray-500 mb-3">Labels</h4>
+        {{if .Labels}}
+        <div class="bg-gray-50 rounded-lg overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+                <tbody class="divide-y divide-gray-200">
+                    {{range $key, $val := .Labels}}
+                    <tr>
+                        <td class="px-4 py-2 text-sm font-mono text-gray-600">{{$key}}</td>
+                        <td class="px-4 py-2 text-sm font-mono text-gray-900">{{$val}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <p class="text-sm text-gray-400">No labels</p>
+        {{end}}
+    </div>
+</div>
+
+<script>
+function toggleEnvValue(btn) {
+    var span = btn.parentElement;
+    var maskText = span.querySelector('.mask-text');
+    var value = span.getAttribute('data-value');
+    if (btn.textContent === 'Show') {
+        maskText.textContent = value;
+        btn.textContent = 'Hide';
+    } else {
+        maskText.textContent = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+        btn.textContent = 'Show';
+    }
+}
+</script>
+{{end}}

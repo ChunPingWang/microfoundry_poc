@@ -13,68 +13,25 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func (s *Server) APIListAppsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	names, err := s.k8sClient.ListApps(ctx)
+	items, err := s.k8sClient.ListAppItems(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
-	ingressMap, _ := s.k8sClient.ListIngresses(ctx)
-
-	type AppResponse struct {
-		Name         string   `json:"name"`
-		State        string   `json:"state"`
-		RunningCount int      `json:"running_count"`
-		TotalCount   int      `json:"total_count"`
-		Routes       []string `json:"routes"`
-	}
-
-	var apps []AppResponse
-	for _, name := range names {
-		app := AppResponse{Name: name, State: "unknown"}
-		if status, err := s.k8sClient.GetAppStatus(ctx, name); err == nil {
-			app.RunningCount = status.RunningCount
-			app.TotalCount = status.TotalCount
-			if status.RunningCount > 0 {
-				app.State = "started"
-			} else {
-				app.State = "stopped"
-			}
-		}
-		if hosts, ok := ingressMap[name]; ok {
-			app.Routes = hosts
-		}
-		apps = append(apps, app)
-	}
-
-	writeJSON(w, http.StatusOK, apps)
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (s *Server) APIGetAppHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 
-	status, err := s.k8sClient.GetAppStatus(ctx, name)
+	detail, err := s.k8sClient.GetAppDetail(ctx, name)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
 
-	ingressMap, _ := s.k8sClient.ListIngresses(ctx)
-
-	state := "stopped"
-	if status.RunningCount > 0 {
-		state = "started"
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"name":          name,
-		"state":         state,
-		"running_count": status.RunningCount,
-		"total_count":   status.TotalCount,
-		"instances":     status.Instances,
-		"routes":        ingressMap[name],
-	})
+	writeJSON(w, http.StatusOK, detail)
 }
 
 func (s *Server) APIGetConfigHandler(w http.ResponseWriter, r *http.Request) {

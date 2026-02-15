@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-//go:embed static/templates/*.html static/templates/partials/*.html
+//go:embed static/templates/*.html static/templates/partials/*.html static/templates/tabs/*.html
 var templateFiles embed.FS
 
 //go:embed static/css/*
@@ -55,6 +55,18 @@ func NewTemplateRenderer() *TemplateRenderer {
 				return "bg-gray-100 text-gray-800"
 			}
 		},
+		"lifecycleBadge": func(lcType string) string {
+			switch strings.ToLower(lcType) {
+			case "docker":
+				return "bg-blue-100 text-blue-800"
+			case "buildpack":
+				return "bg-green-100 text-green-800"
+			case "cnb":
+				return "bg-purple-100 text-purple-800"
+			default:
+				return "bg-gray-100 text-gray-800"
+			}
+		},
 		"timeAgo": func(t time.Time) string {
 			if t.IsZero() {
 				return "-"
@@ -72,6 +84,35 @@ func NewTemplateRenderer() *TemplateRenderer {
 			}
 		},
 		"join": strings.Join,
+		"memFmt": func(mb int) string {
+			if mb >= 1024 {
+				return fmt.Sprintf("%.1fG", float64(mb)/1024)
+			}
+			return fmt.Sprintf("%dM", mb)
+		},
+		"isSensitive": func(key string) bool {
+			upper := strings.ToUpper(key)
+			for _, s := range []string{"PASSWORD", "SECRET", "KEY", "TOKEN", "CREDENTIALS"} {
+				if strings.Contains(upper, s) {
+					return true
+				}
+			}
+			return false
+		},
+		"dict": func(values ...any) map[string]any {
+			if len(values)%2 != 0 {
+				return nil
+			}
+			d := make(map[string]any, len(values)/2)
+			for i := 0; i < len(values); i += 2 {
+				key, ok := values[i].(string)
+				if !ok {
+					continue
+				}
+				d[key] = values[i+1]
+			}
+			return d
+		},
 	}
 
 	tmpl := template.Must(
@@ -79,6 +120,7 @@ func NewTemplateRenderer() *TemplateRenderer {
 			templateFiles,
 			"static/templates/*.html",
 			"static/templates/partials/*.html",
+			"static/templates/tabs/*.html",
 		),
 	)
 

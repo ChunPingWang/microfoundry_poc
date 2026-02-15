@@ -4,116 +4,91 @@
 
 {{define "content"}}
 {{$c := .Content}}
+{{$d := index $c "Detail"}}
+{{$tab := index $c "Tab"}}
 <div class="space-y-6">
     <!-- App Header -->
     <div class="bg-white rounded-lg shadow p-6">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-4">
-                <h3 class="text-2xl font-bold text-gray-900">{{index $c "Name"}}</h3>
-                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium {{stateBg (index $c "State")}}">
-                    {{index $c "State"}}
+                <a href="/apps" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                </a>
+                <h3 class="text-2xl font-bold text-gray-900">{{$d.Name}}</h3>
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium {{stateBg $d.State}}">
+                    {{$d.State}}
                 </span>
             </div>
-            <div class="flex items-center space-x-3">
-                <a href="/apps" class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 transition-colors">
-                    Back to Apps
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="border-b border-gray-200">
+            <nav class="flex -mb-px overflow-x-auto" aria-label="Tabs">
+                <a href="/apps/{{$d.Name}}?tab=overview"
+                   hx-get="/apps/{{$d.Name}}/tab/overview"
+                   hx-target="#tab-content"
+                   hx-push-url="/apps/{{$d.Name}}?tab=overview"
+                   class="whitespace-nowrap py-4 px-6 font-medium text-sm border-b-2 {{if eq $tab "overview"}}border-blue-600 text-blue-600{{else}}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{{end}}">
+                    Overview
                 </a>
-            </div>
+                <a href="/apps/{{$d.Name}}?tab=instances"
+                   hx-get="/apps/{{$d.Name}}/tab/instances"
+                   hx-target="#tab-content"
+                   hx-push-url="/apps/{{$d.Name}}?tab=instances"
+                   class="whitespace-nowrap py-4 px-6 font-medium text-sm border-b-2 {{if eq $tab "instances"}}border-blue-600 text-blue-600{{else}}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{{end}}">
+                    Instances
+                </a>
+                <a href="/apps/{{$d.Name}}?tab=config"
+                   hx-get="/apps/{{$d.Name}}/tab/config"
+                   hx-target="#tab-content"
+                   hx-push-url="/apps/{{$d.Name}}?tab=config"
+                   class="whitespace-nowrap py-4 px-6 font-medium text-sm border-b-2 {{if eq $tab "config"}}border-blue-600 text-blue-600{{else}}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{{end}}">
+                    Config
+                </a>
+                <a href="/apps/{{$d.Name}}?tab=services"
+                   hx-get="/apps/{{$d.Name}}/tab/services"
+                   hx-target="#tab-content"
+                   hx-push-url="/apps/{{$d.Name}}?tab=services"
+                   class="whitespace-nowrap py-4 px-6 font-medium text-sm border-b-2 {{if eq $tab "services"}}border-blue-600 text-blue-600{{else}}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{{end}}">
+                    Services
+                </a>
+                <a href="/apps/{{$d.Name}}?tab=routes"
+                   hx-get="/apps/{{$d.Name}}/tab/routes"
+                   hx-target="#tab-content"
+                   hx-push-url="/apps/{{$d.Name}}?tab=routes"
+                   class="whitespace-nowrap py-4 px-6 font-medium text-sm border-b-2 {{if eq $tab "routes"}}border-blue-600 text-blue-600{{else}}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{{end}}">
+                    Routes
+                </a>
+                <a href="/apps/{{$d.Name}}?tab=logs"
+                   hx-get="/apps/{{$d.Name}}/tab/logs"
+                   hx-target="#tab-content"
+                   hx-push-url="/apps/{{$d.Name}}?tab=logs"
+                   class="whitespace-nowrap py-4 px-6 font-medium text-sm border-b-2 {{if eq $tab "logs"}}border-blue-600 text-blue-600{{else}}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{{end}}">
+                    Logs
+                </a>
+            </nav>
         </div>
-        <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-                <p class="text-sm text-gray-500">Instances</p>
-                <p class="text-lg font-semibold">{{index $c "RunningCount"}}/{{index $c "TotalCount"}}</p>
-            </div>
-            <div>
-                <p class="text-sm text-gray-500">Routes</p>
-                <div>
-                    {{range index $c "Routes"}}
-                    <a href="http://{{.}}" target="_blank" class="text-blue-600 hover:underline text-sm">{{.}}</a>
-                    {{else}}
-                    <span class="text-gray-400 text-sm">No routes</span>
-                    {{end}}
-                </div>
-            </div>
-            <div>
-                <p class="text-sm text-gray-500">Scale</p>
-                <form hx-post="/apps/{{index $c "Name"}}/scale"
-                      hx-target="#instances-panel"
-                      hx-swap="innerHTML"
-                      class="flex items-center space-x-2 mt-1">
-                    <input type="number" name="instances" value="{{index $c "TotalCount"}}" min="0" max="20"
-                           class="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center">
-                    <button type="submit"
-                            class="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors">
-                        Scale
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
 
-    <!-- Instances Table -->
-    <div class="bg-white rounded-lg shadow">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-medium text-gray-900">Instances</h3>
-        </div>
-        <div id="instances-panel"
-             hx-get="/apps/{{index $c "Name"}}/instances"
-             hx-trigger="every 5s"
-             hx-swap="innerHTML">
-            {{template "app_instances.html" $c}}
-        </div>
-    </div>
-
-    <!-- Logs Panel -->
-    <div class="bg-white rounded-lg shadow">
-        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 class="text-lg font-medium text-gray-900">Logs</h3>
-            <button id="log-toggle"
-                    onclick="toggleLogs('{{index $c "Name"}}')"
-                    class="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
-                Start Streaming
-            </button>
-        </div>
-        <div id="log-container" class="hidden">
-            <div hx-ext="sse" id="log-sse-container">
-                <pre id="log-output"
-                     class="bg-gray-900 text-green-400 p-4 overflow-y-auto font-mono text-xs leading-relaxed"
-                     style="max-height: 400px;">
-                </pre>
-            </div>
+        <!-- Tab Content -->
+        <div id="tab-content" class="p-6">
+            {{if eq $tab "overview"}}
+                {{template "tab_overview.html" $d}}
+            {{else if eq $tab "instances"}}
+                {{template "tab_instances.html" $d}}
+            {{else if eq $tab "config"}}
+                {{template "tab_config.html" $d}}
+            {{else if eq $tab "services"}}
+                {{template "tab_services.html" $d}}
+            {{else if eq $tab "routes"}}
+                {{template "tab_routes.html" $d}}
+            {{else if eq $tab "logs"}}
+                {{template "tab_logs.html" $d}}
+            {{end}}
         </div>
     </div>
 </div>
-
-<script>
-function toggleLogs(appName) {
-    const container = document.getElementById('log-container');
-    const toggle = document.getElementById('log-toggle');
-    const sseContainer = document.getElementById('log-sse-container');
-    const logOutput = document.getElementById('log-output');
-
-    if (container.classList.contains('hidden')) {
-        container.classList.remove('hidden');
-        toggle.textContent = 'Stop Streaming';
-        toggle.classList.remove('bg-green-600', 'hover:bg-green-700');
-        toggle.classList.add('bg-red-600', 'hover:bg-red-700');
-
-        sseContainer.setAttribute('sse-connect', '/apps/' + appName + '/logs/stream');
-        logOutput.setAttribute('sse-swap', 'message');
-        logOutput.setAttribute('hx-swap', 'beforeend scroll:bottom');
-        htmx.process(sseContainer);
-    } else {
-        container.classList.add('hidden');
-        toggle.textContent = 'Start Streaming';
-        toggle.classList.remove('bg-red-600', 'hover:bg-red-700');
-        toggle.classList.add('bg-green-600', 'hover:bg-green-700');
-
-        sseContainer.removeAttribute('sse-connect');
-        logOutput.removeAttribute('sse-swap');
-        logOutput.innerHTML = '';
-        htmx.process(sseContainer);
-    }
-}
-</script>
 {{end}}
