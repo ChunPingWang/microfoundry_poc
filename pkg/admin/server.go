@@ -8,23 +8,32 @@ import (
 )
 
 type Server struct {
-	k8sClient *k8s.Client
-	config    *config.Config
-	version   string
-	templates *TemplateRenderer
-	mux       *http.ServeMux
+	clientManager *k8s.ClientManager
+	config        *config.Config
+	version       string
+	templates     *TemplateRenderer
+	mux           *http.ServeMux
 }
 
-func NewServer(k8sClient *k8s.Client, cfg *config.Config, version string) *Server {
+func NewServer(clientManager *k8s.ClientManager, cfg *config.Config, version string) *Server {
 	s := &Server{
-		k8sClient: k8sClient,
-		config:    cfg,
-		version:   version,
-		templates: NewTemplateRenderer(),
-		mux:       http.NewServeMux(),
+		clientManager: clientManager,
+		config:        cfg,
+		version:       version,
+		templates:     NewTemplateRenderer(),
+		mux:           http.NewServeMux(),
 	}
 	s.registerRoutes()
 	return s
+}
+
+// getClient resolves the active K8s client for the current request.
+// Priority: cookie "mf-cluster" → config active cluster.
+func (s *Server) getClient(r *http.Request) (*k8s.Client, error) {
+	if cookie, err := r.Cookie("mf-cluster"); err == nil && cookie.Value != "" {
+		return s.clientManager.GetClient(cookie.Value)
+	}
+	return s.clientManager.GetActiveClient()
 }
 
 func (s *Server) registerRoutes() {
@@ -43,6 +52,13 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /secrets", s.SecretsHandler)
 	s.mux.HandleFunc("GET /users", s.UsersHandler)
 
+	// Cluster routes
+	s.mux.HandleFunc("GET /clusters", s.ClustersListHandler)
+	s.mux.HandleFunc("GET /clusters/{id}", s.ClusterDetailHandler)
+	s.mux.HandleFunc("POST /clusters", s.AddClusterHandler)
+	s.mux.HandleFunc("POST /clusters/{id}/activate", s.SetActiveClusterHandler)
+	s.mux.HandleFunc("DELETE /clusters/{id}", s.RemoveClusterHandler)
+
 	// HTMX action routes
 	s.mux.HandleFunc("POST /apps/{name}/scale", s.ScaleAppHandler)
 	s.mux.HandleFunc("DELETE /apps/{name}", s.DeleteAppHandler)
@@ -53,6 +69,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/config", s.APIGetConfigHandler)
 	s.mux.HandleFunc("POST /api/apps/{name}/scale", s.APIScaleAppHandler)
 	s.mux.HandleFunc("DELETE /api/apps/{name}", s.APIDeleteAppHandler)
+	s.mux.HandleFunc("GET /api/clusters", s.APIClustersListHandler)
+	s.mux.HandleFunc("GET /api/clusters/{id}/health", s.APIClusterHealthHandler)
 }
 
 func (s *Server) ListenAndServe(addr string) error {

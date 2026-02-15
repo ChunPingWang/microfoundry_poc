@@ -45,14 +45,16 @@ func templateFuncs() template.FuncMap {
 		},
 		"stateBg": func(state string) string {
 			switch strings.ToLower(state) {
-			case "started", "running":
+			case "started", "running", "connected":
 				return "bg-green-100 text-green-800"
 			case "stopped", "down":
 				return "bg-red-100 text-red-800"
 			case "starting", "staging", "deploying", "uploading":
 				return "bg-yellow-100 text-yellow-800"
-			case "crashed", "failed":
+			case "crashed", "failed", "error":
 				return "bg-red-100 text-red-800"
+			case "disconnected":
+				return "bg-gray-100 text-gray-800"
 			default:
 				return "bg-gray-100 text-gray-800"
 			}
@@ -145,6 +147,8 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"services.html",
 		"secrets.html",
 		"users.html",
+		"clusters.html",
+		"cluster_detail.html",
 	}
 
 	pages := make(map[string]*template.Template, len(pageFiles)+3)

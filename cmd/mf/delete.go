@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/younjinjeong/microfoundry/pkg/hosts"
-	"github.com/younjinjeong/microfoundry/pkg/k8s"
 )
 
 func deleteCmd() *cobra.Command {
@@ -17,9 +16,7 @@ func deleteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			name := args[0]
-			domain := "cf-local.dev"
-
-			k8sClient, err := k8s.NewClient("docker-desktop", "microfoundry", domain)
+			k8sClient, err := newK8sClient()
 			if err != nil {
 				return err
 			}

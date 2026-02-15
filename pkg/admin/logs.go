@@ -21,8 +21,15 @@ func (s *Server) LogStreamHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	client, err := s.getClient(r)
+	if err != nil {
+		fmt.Fprintf(w, "event: error\ndata: %s\n\n", html.EscapeString(err.Error()))
+		flusher.Flush()
+		return
+	}
+
 	ctx := r.Context()
-	stream, err := s.k8sClient.GetAppLogs(ctx, name, true)
+	stream, err := client.GetAppLogs(ctx, name, true)
 	if err != nil {
 		fmt.Fprintf(w, "event: error\ndata: %s\n\n", html.EscapeString(err.Error()))
 		flusher.Flush()

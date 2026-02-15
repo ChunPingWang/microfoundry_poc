@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/younjinjeong/microfoundry/pkg/k8s"
 )
 
 func scaleCmd() *cobra.Command {
@@ -23,7 +22,7 @@ func scaleCmd() *cobra.Command {
 				return fmt.Errorf("--instances (-i) must be a positive number")
 			}
 
-			k8sClient, err := k8s.NewClient("docker-desktop", "microfoundry", "cf-local.dev")
+			k8sClient, err := newK8sClient()
 			if err != nil {
 				return err
 			}

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/younjinjeong/microfoundry/pkg/build"
+	"github.com/younjinjeong/microfoundry/pkg/config"
 	"github.com/younjinjeong/microfoundry/pkg/hosts"
 	"github.com/younjinjeong/microfoundry/pkg/k8s"
 	"github.com/younjinjeong/microfoundry/pkg/manifest"
@@ -31,6 +32,17 @@ func pushCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 
+			// Load config for active cluster
+			cfg, err := config.Load()
+			if err != nil {
+				return fmt.Errorf("loading config: %w", err)
+			}
+			_, cluster, ok := cfg.Kubernetes.GetActiveCluster()
+			if !ok {
+				return fmt.Errorf("no active cluster configured")
+			}
+			domain := cluster.Domain
+
 			// Determine source directory
 			srcDir := path
 			if srcDir == "" {
@@ -41,7 +53,6 @@ func pushCmd() *cobra.Command {
 			// Load manifest or build from flags
 			var app models.App
 			var routes []models.Route
-			domain := "cf-local.dev"
 
 			manifestPath := filepath.Join(srcDir, "manifest.yml")
 			if _, err := os.Stat(manifestPath); err == nil {
@@ -99,8 +110,8 @@ func pushCmd() *cobra.Command {
 			fmt.Printf("  Build: OK (%s)\n", result.ImageRef)
 
 			// Phase 2: Deploy to K8s
-			fmt.Printf("Deploying %s...\n", app.Name)
-			k8sClient, err := k8s.NewClient("docker-desktop", "microfoundry", domain)
+			fmt.Printf("Deploying %s to cluster %s...\n", app.Name, cfg.Kubernetes.Active)
+			k8sClient, err := k8s.NewClient(cluster.Context, cluster.Namespace, domain)
 			if err != nil {
 				return fmt.Errorf("connecting to kubernetes: %w", err)
 			}

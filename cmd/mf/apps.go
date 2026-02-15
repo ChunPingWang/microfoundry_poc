@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/younjinjeong/microfoundry/pkg/k8s"
 )
 
 func appsCmd() *cobra.Command {
@@ -15,7 +14,7 @@ func appsCmd() *cobra.Command {
 		Short: "List all deployed applications",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			k8sClient, err := k8s.NewClient("docker-desktop", "microfoundry", "cf-local.dev")
+			k8sClient, err := newK8sClient()
 			if err != nil {
 				return err
 			}
@@ -69,7 +68,7 @@ func appCmd() *cobra.Command {
 			ctx := context.Background()
 			name := args[0]
 
-			k8sClient, err := k8s.NewClient("docker-desktop", "microfoundry", "cf-local.dev")
+			k8sClient, err := newK8sClient()
 			if err != nil {
 				return err
 			}
