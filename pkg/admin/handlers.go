@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 )
@@ -15,7 +14,7 @@ type PageData struct {
 }
 
 func (s *Server) DashboardHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 	apps, _ := s.k8sClient.ListApps(ctx)
 
 	data := PageData{
@@ -34,7 +33,7 @@ func (s *Server) DashboardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) AppsListHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 	items, err := s.k8sClient.ListAppItems(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -76,7 +75,7 @@ func (s *Server) AppsListHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) AppDetailHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 	name := r.PathValue("name")
 
 	detail, err := s.k8sClient.GetAppDetail(ctx, name)
@@ -103,11 +102,22 @@ func (s *Server) AppDetailHandler(w http.ResponseWriter, r *http.Request) {
 	s.templates.Render(w, "app_detail.html", data)
 }
 
+// validTabs is the allowlist of valid tab names for the app detail view.
+var validTabs = map[string]bool{
+	"overview": true, "instances": true, "config": true,
+	"services": true, "routes": true, "logs": true,
+}
+
 // AppTabHandler serves individual tab content as HTMX partials.
 func (s *Server) AppTabHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 	name := r.PathValue("name")
 	tab := r.PathValue("tab")
+
+	if !validTabs[tab] {
+		http.Error(w, "invalid tab", http.StatusBadRequest)
+		return
+	}
 
 	detail, err := s.k8sClient.GetAppDetail(ctx, name)
 	if err != nil {
@@ -120,7 +130,7 @@ func (s *Server) AppTabHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) AppInstancesHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 	name := r.PathValue("name")
 
 	status, err := s.k8sClient.GetAppStatus(ctx, name)
@@ -137,7 +147,7 @@ func (s *Server) AppInstancesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ScaleAppHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 	name := r.PathValue("name")
 
 	instancesStr := r.FormValue("instances")
@@ -166,7 +176,7 @@ func (s *Server) ScaleAppHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) DeleteAppHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 	name := r.PathValue("name")
 
 	if err := s.k8sClient.DeleteApp(ctx, name); err != nil {

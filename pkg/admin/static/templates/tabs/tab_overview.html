@@ -86,7 +86,7 @@
                 {{end}}
                 <div class="flex justify-between">
                     <dt class="text-sm text-gray-600">Health Check</dt>
-                    <dd class="text-sm text-gray-900">{{.HealthCheck.Type}} :{{.Port}} (interval {{.HealthCheck.Interval}})</dd>
+                    <dd class="text-sm text-gray-900">{{.HealthCheck.Type}} :{{.Port}}{{if .HealthCheck.Timeout}} (timeout {{.HealthCheck.Timeout}}s){{end}}</dd>
                 </div>
                 {{if .Buildpacks}}
                 <div class="flex justify-between">

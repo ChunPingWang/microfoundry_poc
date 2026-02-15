@@ -57,6 +57,10 @@ func (s *Server) APIScaleAppHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
+	if body.Instances < 0 || body.Instances > 20 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "instances must be between 0 and 20"})
+		return
+	}
 
 	if err := s.k8sClient.ScaleApp(ctx, name, body.Instances); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
