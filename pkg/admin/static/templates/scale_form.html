@@ -1,0 +1,18 @@
+{{define "scale_form.html"}}
+<form hx-post="/apps/{{.Name}}/scale"
+      hx-target="#app-row-{{.Name}}"
+      hx-swap="outerHTML"
+      class="flex items-center space-x-2">
+    <input type="number" name="instances" value="{{.TotalCount}}" min="0" max="20"
+           class="w-16 px-2 py-1 border border-gray-300 rounded text-xs text-center">
+    <button type="submit"
+            class="px-2 py-1 bg-green-50 text-green-700 rounded hover:bg-green-100 text-xs font-medium">
+        Apply
+    </button>
+    <button type="button"
+            onclick="this.closest('form').parentElement.innerHTML=''"
+            class="px-2 py-1 bg-gray-50 text-gray-600 rounded hover:bg-gray-100 text-xs font-medium">
+        Cancel
+    </button>
+</form>
+{{end}}

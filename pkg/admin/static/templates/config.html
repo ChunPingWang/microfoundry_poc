@@ -1,0 +1,63 @@
+{{define "config.html"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+{{$c := .Content}}
+<div class="space-y-6">
+    <!-- Kubernetes Configuration -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Kubernetes</h3>
+        </div>
+        <dl class="divide-y divide-gray-200">
+            <div class="px-6 py-4 flex">
+                <dt class="w-48 text-sm font-medium text-gray-500">Context</dt>
+                <dd class="text-sm text-gray-900 font-mono">{{index $c "Context"}}</dd>
+            </div>
+            <div class="px-6 py-4 flex">
+                <dt class="w-48 text-sm font-medium text-gray-500">Namespace</dt>
+                <dd class="text-sm text-gray-900 font-mono">{{index $c "Namespace"}}</dd>
+            </div>
+            <div class="px-6 py-4 flex">
+                <dt class="w-48 text-sm font-medium text-gray-500">Domain</dt>
+                <dd class="text-sm text-gray-900 font-mono">{{index $c "Domain"}}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- GitHub Configuration -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">GitHub</h3>
+        </div>
+        <dl class="divide-y divide-gray-200">
+            <div class="px-6 py-4 flex">
+                <dt class="w-48 text-sm font-medium text-gray-500">Owner</dt>
+                <dd class="text-sm text-gray-900 font-mono">{{index $c "Owner"}}</dd>
+            </div>
+            <div class="px-6 py-4 flex">
+                <dt class="w-48 text-sm font-medium text-gray-500">Repository</dt>
+                <dd class="text-sm text-gray-900 font-mono">{{index $c "Repo"}}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- Platform Info -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Platform</h3>
+        </div>
+        <dl class="divide-y divide-gray-200">
+            <div class="px-6 py-4 flex">
+                <dt class="w-48 text-sm font-medium text-gray-500">Version</dt>
+                <dd class="text-sm text-gray-900 font-mono">{{$.Version}}</dd>
+            </div>
+            <div class="px-6 py-4 flex">
+                <dt class="w-48 text-sm font-medium text-gray-500">App Routing</dt>
+                <dd class="text-sm text-gray-900">&lt;app-name&gt;.{{index $c "Domain"}}</dd>
+            </div>
+        </dl>
+    </div>
+</div>
+{{end}}

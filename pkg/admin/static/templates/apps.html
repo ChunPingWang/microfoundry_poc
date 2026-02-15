@@ -1,0 +1,51 @@
+{{define "apps.html"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+<div class="bg-white rounded-lg shadow">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg font-medium text-gray-900">Deployed Applications</h3>
+        <button hx-get="/apps"
+                hx-target="#app-table-body"
+                hx-select="#app-table-body"
+                hx-swap="outerHTML"
+                class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 transition-colors">
+            Refresh
+        </button>
+    </div>
+    <div id="app-table"
+         hx-get="/apps"
+         hx-trigger="every 10s"
+         hx-select="#app-table-body"
+         hx-target="#app-table-body"
+         hx-swap="outerHTML">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">State</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instances</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Routes</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="app-table-body" class="bg-white divide-y divide-gray-200">
+                {{range .Content}}
+                    {{template "app_row.html" .}}
+                {{else}}
+                <tr>
+                    <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                        <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                        </svg>
+                        <p class="text-lg font-medium">No applications deployed</p>
+                        <p class="text-sm mt-1">Use <code class="bg-gray-100 px-1.5 py-0.5 rounded text-gray-800">mf push</code> to deploy your first app.</p>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}
