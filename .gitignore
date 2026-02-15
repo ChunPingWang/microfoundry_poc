@@ -1,0 +1,50 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build artifacts
+dist/
+out/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config with secrets
+configs/mf.yaml
+.mf/
+
+# Environment
+.env
+.env.*
+
+# Reference repos (cloned separately)
+cli/
+cf-deployment/
+
+# Kubernetes generated
+deploy/k8s/overlays/*/generated/
+
+# Docker
+.docker/
