@@ -27,6 +27,17 @@ func main() {
 		deleteCmd(),
 		scaleCmd(),
 		adminCmd(),
+		marketplaceCmd(),
+		createServiceCmd(),
+		servicesCmd(),
+		serviceCmd(),
+		bindServiceCmd(),
+		unbindServiceCmd(),
+		deleteServiceCmd(),
+		secretsListCmd(),
+		secretDetailCmd(),
+		createSecretCmd(),
+		deleteSecretCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
