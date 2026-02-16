@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/younjinjeong/microfoundry/pkg/k8s"
 )
 
 func logsCmd() *cobra.Command {
@@ -21,7 +20,7 @@ func logsCmd() *cobra.Command {
 			ctx := context.Background()
 			name := args[0]
 
-			k8sClient, err := k8s.NewClient("docker-desktop", "microfoundry", "cf-local.dev")
+			k8sClient, err := newK8sClient()
 			if err != nil {
 				return err
 			}

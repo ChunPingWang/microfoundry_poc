@@ -1,0 +1,199 @@
+{{define "cluster_detail.html"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+{{$d := .Content}}
+<div class="space-y-6">
+    <!-- Cluster Header -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/clusters" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                </a>
+                <h3 class="text-2xl font-bold text-gray-900">{{$d.Name}}</h3>
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium {{stateBg $d.Status}}">
+                    {{$d.Status}}
+                </span>
+                {{if $d.IsActive}}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                    active cluster
+                </span>
+                {{end}}
+            </div>
+            {{if $d.Version}}
+            <span class="text-sm text-gray-500">Kubernetes {{$d.Version}}</span>
+            {{end}}
+        </div>
+    </div>
+
+    <!-- Info Cards Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Cluster Info Card -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Cluster Info</h4>
+            </div>
+            <div class="p-6">
+                <dl class="grid grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Provider</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            {{if eq $d.Provider "docker-desktop"}}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">docker-desktop</span>
+                            {{else if eq $d.Provider "eks"}}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">EKS</span>
+                            {{else if eq $d.Provider "gke"}}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">GKE</span>
+                            {{else if eq $d.Provider "aks"}}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">AKS</span>
+                            {{else if eq $d.Provider "native"}}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">native</span>
+                            {{else}}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{{$d.Provider}}</span>
+                            {{end}}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Context</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{$d.Context}}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Namespace</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{$d.Namespace}}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Domain</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{$d.Domain}}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Version</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{if $d.Version}}{{$d.Version}}{{else}}<span class="text-gray-400">-</span>{{end}}</dd>
+                    </div>
+                    {{if $d.Region}}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Region</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{$d.Region}}</dd>
+                    </div>
+                    {{end}}
+                </dl>
+            </div>
+        </div>
+
+        <!-- Resources Card -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Resources</h4>
+            </div>
+            <div class="p-6 space-y-5">
+                <!-- CPU -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-gray-700">CPU</span>
+                        <span class="text-sm text-gray-500">
+                            {{if $d.ResourceUsage.CPUUsed}}{{$d.ResourceUsage.CPUUsed}}{{else}}--{{end}}
+                            / {{if $d.ResourceUsage.CPUCapacity}}{{$d.ResourceUsage.CPUCapacity}}{{else}}--{{end}}
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-blue-500 h-2 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                <!-- Memory -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-gray-700">Memory</span>
+                        <span class="text-sm text-gray-500">
+                            {{if $d.ResourceUsage.MemoryUsed}}{{$d.ResourceUsage.MemoryUsed}}{{else}}--{{end}}
+                            / {{if $d.ResourceUsage.MemoryCapacity}}{{$d.ResourceUsage.MemoryCapacity}}{{else}}--{{end}}
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                <!-- Pods -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-gray-700">Pods</span>
+                        <span class="text-sm text-gray-500">
+                            {{$d.ResourceUsage.PodUsed}} / {{$d.ResourceUsage.PodCapacity}}
+                        </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-purple-500 h-2 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nodes Table -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Nodes ({{$d.NodeCount}})</h4>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roles</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">OS</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPU</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Memory</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {{range $d.Nodes}}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{.Name}}</td>
+                        <td class="px-4 py-4 whitespace-nowrap">
+                            {{if eq .Status "Ready"}}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Ready</span>
+                            {{else}}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">{{.Status}}</span>
+                            {{end}}
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{{.Roles}}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{{.Version}}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{{.OS}}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{{.CPU}}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{{.Memory}}</td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="7" class="px-6 py-8 text-center text-gray-500 text-sm">
+                            No node information available.
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Apps Summary -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center space-x-4">
+            <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-500">Deployed Applications</p>
+                <p class="text-2xl font-bold text-gray-900">{{$d.AppCount}}</p>
+            </div>
+            <a href="/apps" class="ml-auto text-sm text-blue-600 hover:text-blue-800 font-medium">
+                View Apps &rarr;
+            </a>
+        </div>
+    </div>
+</div>
+{{end}}

@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/younjinjeong/microfoundry/pkg/config"
+	"github.com/younjinjeong/microfoundry/pkg/k8s"
 )
 
 var version = "dev"
@@ -25,12 +27,36 @@ func main() {
 		deleteCmd(),
 		scaleCmd(),
 		adminCmd(),
+		marketplaceCmd(),
+		createServiceCmd(),
+		servicesCmd(),
+		serviceCmd(),
+		bindServiceCmd(),
+		unbindServiceCmd(),
+		deleteServiceCmd(),
+		secretsListCmd(),
+		secretDetailCmd(),
+		createSecretCmd(),
+		deleteSecretCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// newK8sClient loads config and returns a k8s.Client for the active cluster.
+func newK8sClient() (*k8s.Client, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	_, cluster, ok := cfg.Kubernetes.GetActiveCluster()
+	if !ok {
+		return nil, fmt.Errorf("no active cluster configured")
+	}
+	return k8s.NewClient(cluster.Context, cluster.Namespace, cluster.Domain)
 }
 
 func versionCmd() *cobra.Command {

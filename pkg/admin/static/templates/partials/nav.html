@@ -12,6 +12,13 @@
             </svg>
             Dashboard
         </a>
+        <a href="/clusters"
+           class="flex items-center px-3 py-2 rounded-md text-sm font-medium {{if eq .Active "clusters"}}bg-gray-800 text-white{{else}}hover:bg-gray-800 hover:text-white{{end}}">
+            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+            </svg>
+            Kubernetes Clusters
+        </a>
         <a href="/apps"
            class="flex items-center px-3 py-2 rounded-md text-sm font-medium {{if eq .Active "apps"}}bg-gray-800 text-white{{else}}hover:bg-gray-800 hover:text-white{{end}}">
             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -25,6 +32,13 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
             </svg>
             Services
+        </a>
+        <a href="/marketplace"
+           class="flex items-center px-3 py-2 rounded-md text-sm font-medium {{if eq .Active "marketplace"}}bg-gray-800 text-white{{else}}hover:bg-gray-800 hover:text-white{{end}}">
+            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"/>
+            </svg>
+            Marketplace
         </a>
         <a href="/secrets"
            class="flex items-center px-3 py-2 rounded-md text-sm font-medium {{if eq .Active "secrets"}}bg-gray-800 text-white{{else}}hover:bg-gray-800 hover:text-white{{end}}">

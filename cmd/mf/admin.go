@@ -22,24 +22,21 @@ func adminCmd() *cobra.Command {
 				return fmt.Errorf("loading config: %w", err)
 			}
 
-			k8sClient, err := k8s.NewClient(
-				cfg.Kubernetes.Context,
-				cfg.Kubernetes.Namespace,
-				"cf-local.dev",
+			clientManager := k8s.NewClientManager(
+				cfg.Kubernetes.Clusters,
+				cfg.Kubernetes.Active,
 			)
-			if err != nil {
-				return fmt.Errorf("connecting to kubernetes: %w", err)
-			}
 
-			srv := admin.NewServer(k8sClient, cfg, version)
+			srv := admin.NewServer(clientManager, cfg, version)
 			addr := fmt.Sprintf("%s:%d", host, port)
 			fmt.Printf("MicroFoundry Admin starting at http://localhost:%d\n", port)
+			fmt.Printf("Active cluster: %s\n", cfg.Kubernetes.Active)
 			return srv.ListenAndServe(addr)
 		},
 	}
 
 	cmd.Flags().IntVarP(&port, "port", "p", 8080, "Port to listen on")
-	cmd.Flags().StringVar(&host, "host", "0.0.0.0", "Host to bind to")
+	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "Host to bind to")
 
 	return cmd
 }

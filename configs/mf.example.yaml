@@ -3,8 +3,28 @@ github:
   repo: "microfoundry"
 
 kubernetes:
-  context: "docker-desktop"
-  namespace: "microfoundry"
+  active: "docker-desktop"
+  clusters:
+    docker-desktop:
+      name: "docker-desktop"
+      context: "docker-desktop"
+      namespace: "microfoundry"
+      domain: "cf-local.dev"
+      provider: "docker-desktop"
+      enabled: true
+    # Example: Add an EKS cluster
+    # my-eks-cluster:
+    #   name: "Production EKS"
+    #   context: "arn:aws:eks:us-east-1:123456789:cluster/my-cluster"
+    #   namespace: "microfoundry"
+    #   domain: "apps.example.com"
+    #   provider: "eks"
+    #   region: "us-east-1"
+    #   enabled: true
+
+  # Legacy single-cluster format (auto-migrated):
+  # context: "docker-desktop"
+  # namespace: "microfoundry"
 
 admin:
   port: 8080

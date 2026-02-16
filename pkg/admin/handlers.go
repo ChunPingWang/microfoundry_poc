@@ -7,34 +7,54 @@ import (
 
 // PageData is the base data passed to every full-page template.
 type PageData struct {
-	Title   string
-	Version string
-	Active  string
-	Content any
+	Title         string
+	Version       string
+	Active        string
+	ActiveCluster string
+	Content       any
+}
+
+func (s *Server) pageData(title, active string) PageData {
+	return PageData{
+		Title:         title,
+		Version:       s.version,
+		Active:        active,
+		ActiveCluster: s.clientManager.GetActive(),
+	}
 }
 
 func (s *Server) DashboardHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	apps, _ := s.k8sClient.ListApps(ctx)
 
-	data := PageData{
-		Title:   "Dashboard",
-		Version: s.version,
-		Active:  "dashboard",
-		Content: map[string]any{
-			"AppCount":  len(apps),
-			"Domain":    s.k8sClient.Domain,
-			"Namespace": s.k8sClient.Namespace,
-			"Context":   s.config.Kubernetes.Context,
-			"GitHub":    s.config.GitHub.Owner + "/" + s.config.GitHub.Repo,
-		},
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	apps, _ := client.ListApps(ctx)
+
+	data := s.pageData("Dashboard", "dashboard")
+	data.Content = map[string]any{
+		"AppCount":  len(apps),
+		"Domain":    client.Domain,
+		"Namespace": client.Namespace,
+		"Context":   s.config.Kubernetes.Active,
+		"GitHub":    s.config.GitHub.Owner + "/" + s.config.GitHub.Repo,
 	}
 	s.templates.Render(w, "dashboard.html", data)
 }
 
 func (s *Server) AppsListHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	items, err := s.k8sClient.ListAppItems(ctx)
+
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	items, err := client.ListAppItems(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -49,27 +69,19 @@ func (s *Server) AppsListHandler(w http.ResponseWriter, r *http.Request) {
 				filtered = append(filtered, item)
 			}
 		}
-		data := PageData{
-			Title:   "Applications",
-			Version: s.version,
-			Active:  "apps",
-			Content: map[string]any{
-				"Apps":   filtered,
-				"Filter": filter,
-			},
+		data := s.pageData("Applications", "apps")
+		data.Content = map[string]any{
+			"Apps":   filtered,
+			"Filter": filter,
 		}
 		s.templates.Render(w, "apps.html", data)
 		return
 	}
 
-	data := PageData{
-		Title:   "Applications",
-		Version: s.version,
-		Active:  "apps",
-		Content: map[string]any{
-			"Apps":   items,
-			"Filter": "all",
-		},
+	data := s.pageData("Applications", "apps")
+	data.Content = map[string]any{
+		"Apps":   items,
+		"Filter": "all",
 	}
 	s.templates.Render(w, "apps.html", data)
 }
@@ -78,7 +90,13 @@ func (s *Server) AppDetailHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 
-	detail, err := s.k8sClient.GetAppDetail(ctx, name)
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	detail, err := client.GetAppDetail(ctx, name)
 	if err != nil {
 		http.Error(w, "App not found: "+err.Error(), http.StatusNotFound)
 		return
@@ -90,14 +108,10 @@ func (s *Server) AppDetailHandler(w http.ResponseWriter, r *http.Request) {
 		tab = "overview"
 	}
 
-	data := PageData{
-		Title:   name,
-		Version: s.version,
-		Active:  "apps",
-		Content: map[string]any{
-			"Detail": detail,
-			"Tab":    tab,
-		},
+	data := s.pageData(name, "apps")
+	data.Content = map[string]any{
+		"Detail": detail,
+		"Tab":    tab,
 	}
 	s.templates.Render(w, "app_detail.html", data)
 }
@@ -119,7 +133,13 @@ func (s *Server) AppTabHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	detail, err := s.k8sClient.GetAppDetail(ctx, name)
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	detail, err := client.GetAppDetail(ctx, name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -133,7 +153,13 @@ func (s *Server) AppInstancesHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 
-	status, err := s.k8sClient.GetAppStatus(ctx, name)
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	status, err := client.GetAppStatus(ctx, name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -152,18 +178,24 @@ func (s *Server) ScaleAppHandler(w http.ResponseWriter, r *http.Request) {
 
 	instancesStr := r.FormValue("instances")
 	instances, err := strconv.Atoi(instancesStr)
-	if err != nil || instances < 0 {
-		http.Error(w, "Invalid instance count", http.StatusBadRequest)
+	if err != nil || instances < 0 || instances > 20 {
+		http.Error(w, "instances must be between 0 and 20", http.StatusBadRequest)
 		return
 	}
 
-	if err := s.k8sClient.ScaleApp(ctx, name, instances); err != nil {
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := client.ScaleApp(ctx, name, instances); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Return updated app row via ListAppItems
-	items, _ := s.k8sClient.ListAppItems(ctx)
+	items, _ := client.ListAppItems(ctx)
 	for _, item := range items {
 		if item.Name == name {
 			s.templates.RenderPartial(w, "app_row.html", item)
@@ -179,7 +211,13 @@ func (s *Server) DeleteAppHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 
-	if err := s.k8sClient.DeleteApp(ctx, name); err != nil {
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := client.DeleteApp(ctx, name); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -188,45 +226,28 @@ func (s *Server) DeleteAppHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ConfigHandler(w http.ResponseWriter, r *http.Request) {
-	data := PageData{
-		Title:   "Configuration",
-		Version: s.version,
-		Active:  "config",
-		Content: map[string]any{
-			"Domain":    s.k8sClient.Domain,
-			"Namespace": s.k8sClient.Namespace,
-			"Context":   s.config.Kubernetes.Context,
-			"GitHub":    s.config.GitHub.Owner + "/" + s.config.GitHub.Repo,
-			"Owner":     s.config.GitHub.Owner,
-			"Repo":      s.config.GitHub.Repo,
-		},
+	client, _ := s.getClient(r)
+
+	domain := ""
+	namespace := ""
+	if client != nil {
+		domain = client.Domain
+		namespace = client.Namespace
+	}
+
+	data := s.pageData("Configuration", "config")
+	data.Content = map[string]any{
+		"Domain":    domain,
+		"Namespace": namespace,
+		"Context":   s.config.Kubernetes.Active,
+		"GitHub":    s.config.GitHub.Owner + "/" + s.config.GitHub.Repo,
+		"Owner":     s.config.GitHub.Owner,
+		"Repo":      s.config.GitHub.Repo,
 	}
 	s.templates.Render(w, "config.html", data)
 }
 
-func (s *Server) ServicesHandler(w http.ResponseWriter, r *http.Request) {
-	data := PageData{
-		Title:   "Backing Services",
-		Version: s.version,
-		Active:  "services",
-	}
-	s.templates.Render(w, "services.html", data)
-}
-
-func (s *Server) SecretsHandler(w http.ResponseWriter, r *http.Request) {
-	data := PageData{
-		Title:   "Secrets",
-		Version: s.version,
-		Active:  "secrets",
-	}
-	s.templates.Render(w, "secrets.html", data)
-}
-
 func (s *Server) UsersHandler(w http.ResponseWriter, r *http.Request) {
-	data := PageData{
-		Title:   "Users & Organizations",
-		Version: s.version,
-		Active:  "users",
-	}
+	data := s.pageData("Users & Organizations", "users")
 	s.templates.Render(w, "users.html", data)
 }
