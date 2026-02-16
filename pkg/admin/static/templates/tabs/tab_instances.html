@@ -1,0 +1,53 @@
+{{define "tab_instances.html"}}
+<div id="instances-panel"
+     hx-get="/apps/{{.Name}}/instances"
+     hx-trigger="every 5s"
+     hx-swap="innerHTML">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">State</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Since</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Restarts</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Node</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pod Name</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            {{range .InstanceList}}
+            <tr>
+                <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-700">#{{.Index}}</td>
+                <td class="px-6 py-3 whitespace-nowrap">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{stateBg .State}}">
+                        {{.State}}
+                    </span>
+                </td>
+                <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">{{timeAgo .Since}}</td>
+                <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">{{.RestartCount}}</td>
+                <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">{{.NodeName}}</td>
+                <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 font-mono text-xs">{{.PodName}}</td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="6" class="px-6 py-8 text-center text-gray-500 text-sm">No instances running</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+
+    <div class="mt-4 flex items-center justify-between">
+        <p class="text-sm text-gray-500">{{.RunningCount}}/{{.Instances}} instances running</p>
+        <form hx-post="/apps/{{.Name}}/scale"
+              hx-target="#tab-content"
+              class="flex items-center space-x-2">
+            <input type="number" name="instances" value="{{.Instances}}" min="0" max="20"
+                   class="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center">
+            <button type="submit"
+                    class="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors">
+                Scale
+            </button>
+        </form>
+    </div>
+</div>
+{{end}}

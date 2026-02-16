@@ -1,0 +1,57 @@
+{{define "tab_logs.html"}}
+<div>
+    <div class="flex items-center justify-between mb-4">
+        <p class="text-sm text-gray-500">Live log stream from all instances</p>
+        <button id="log-toggle"
+                onclick="toggleLogs('{{.Name}}')"
+                class="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
+            Start Streaming
+        </button>
+    </div>
+    <div id="log-container" class="hidden">
+        <div hx-ext="sse" id="log-sse-container">
+            <pre id="log-output"
+                 class="bg-gray-900 text-green-400 p-4 overflow-y-auto font-mono text-xs leading-relaxed rounded-lg"
+                 style="max-height: 500px;">
+            </pre>
+        </div>
+    </div>
+    <div id="log-placeholder" class="bg-gray-900 rounded-lg p-8 text-center">
+        <p class="text-gray-500 text-sm">Click "Start Streaming" to view live logs</p>
+    </div>
+</div>
+
+<script>
+function toggleLogs(appName) {
+    var container = document.getElementById('log-container');
+    var placeholder = document.getElementById('log-placeholder');
+    var toggle = document.getElementById('log-toggle');
+    var sseContainer = document.getElementById('log-sse-container');
+    var logOutput = document.getElementById('log-output');
+
+    if (container.classList.contains('hidden')) {
+        container.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+        toggle.textContent = 'Stop Streaming';
+        toggle.classList.remove('bg-green-600', 'hover:bg-green-700');
+        toggle.classList.add('bg-red-600', 'hover:bg-red-700');
+
+        sseContainer.setAttribute('sse-connect', '/apps/' + appName + '/logs/stream');
+        logOutput.setAttribute('sse-swap', 'message');
+        logOutput.setAttribute('hx-swap', 'beforeend scroll:bottom');
+        htmx.process(sseContainer);
+    } else {
+        container.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        toggle.textContent = 'Start Streaming';
+        toggle.classList.remove('bg-red-600', 'hover:bg-red-700');
+        toggle.classList.add('bg-green-600', 'hover:bg-green-700');
+
+        sseContainer.removeAttribute('sse-connect');
+        logOutput.removeAttribute('sse-swap');
+        logOutput.innerHTML = '';
+        htmx.process(sseContainer);
+    }
+}
+</script>
+{{end}}

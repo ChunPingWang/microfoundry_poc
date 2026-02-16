@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"time"
 
@@ -73,6 +74,14 @@ func pushCmd() *cobra.Command {
 			app.GUID = uuid.New().String()
 			app.CreatedAt = time.Now()
 			app.UpdatedAt = time.Now()
+
+			// Set owner from current OS user
+			if u, err := user.Current(); err == nil {
+				if app.Env == nil {
+					app.Env = make(map[string]string)
+				}
+				app.Env["MICROFOUNDRY_OWNER"] = u.Username
+			}
 
 			// Phase 1: Build
 			fmt.Printf("Building %s...\n", app.Name)

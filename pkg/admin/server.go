@@ -35,6 +35,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /{$}", s.DashboardHandler)
 	s.mux.HandleFunc("GET /apps", s.AppsListHandler)
 	s.mux.HandleFunc("GET /apps/{name}", s.AppDetailHandler)
+	s.mux.HandleFunc("GET /apps/{name}/tab/{tab}", s.AppTabHandler)
 	s.mux.HandleFunc("GET /apps/{name}/instances", s.AppInstancesHandler)
 	s.mux.HandleFunc("GET /apps/{name}/logs/stream", s.LogStreamHandler)
 	s.mux.HandleFunc("GET /config", s.ConfigHandler)

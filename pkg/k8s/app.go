@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/younjinjeong/microfoundry/pkg/models"
@@ -91,11 +93,29 @@ func (c *Client) DeployApp(ctx context.Context, app models.App, routes []models.
 		},
 	}
 
+	// Build annotations for metadata
+	annotations := map[string]string{
+		"microfoundry.io/lifecycle":   string(app.LifecycleType),
+		"microfoundry.io/disk-mb":    fmt.Sprintf("%d", app.DiskMB),
+		"microfoundry.io/port":       fmt.Sprintf("%d", app.Port),
+		"microfoundry.io/created-at": app.CreatedAt.Format(time.RFC3339),
+	}
+	if app.GUID != "" {
+		annotations["microfoundry.io/guid"] = app.GUID
+	}
+	if len(app.Buildpacks) > 0 {
+		annotations["microfoundry.io/buildpacks"] = strings.Join(app.Buildpacks, ",")
+	}
+	if owner, ok := app.Env["MICROFOUNDRY_OWNER"]; ok {
+		annotations["microfoundry.io/owner"] = owner
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      app.Name,
-			Namespace: c.Namespace,
-			Labels:    labels,
+			Name:        app.Name,
+			Namespace:   c.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -196,8 +216,12 @@ func (c *Client) GetAppStatus(ctx context.Context, name string) (*models.AppStat
 	for i, pod := range pods.Items {
 		state := "DOWN"
 		var since time.Time
+		var restartCount int
+		var imageID string
 		if len(pod.Status.ContainerStatuses) > 0 {
 			cs := pod.Status.ContainerStatuses[0]
+			restartCount = int(cs.RestartCount)
+			imageID = cs.ImageID
 			if cs.State.Running != nil {
 				state = "RUNNING"
 				since = cs.State.Running.StartedAt.Time
@@ -209,9 +233,13 @@ func (c *Client) GetAppStatus(ctx context.Context, name string) (*models.AppStat
 			}
 		}
 		instances = append(instances, models.InstanceStatus{
-			Index: i,
-			State: state,
-			Since: since,
+			Index:        i,
+			State:        state,
+			Since:        since,
+			RestartCount: restartCount,
+			NodeName:     pod.Spec.NodeName,
+			PodName:      pod.Name,
+			ImageID:      imageID,
 		})
 	}
 
@@ -256,6 +284,274 @@ func (c *Client) GetAppLogs(ctx context.Context, name string, follow bool) (io.R
 		Container: "app",
 	}
 	return c.Clientset.CoreV1().Pods(c.Namespace).GetLogs(pods.Items[0].Name, opts).Stream(ctx)
+}
+
+// GetAppDetail returns comprehensive app info extracted from K8s resources.
+func (c *Client) GetAppDetail(ctx context.Context, name string) (*models.AppDetail, error) {
+	dep, err := c.Clientset.AppsV1().Deployments(c.Namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("getting deployment %s: %w", name, err)
+	}
+
+	status, err := c.GetAppStatus(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	ann := dep.Annotations
+	if ann == nil {
+		ann = map[string]string{}
+	}
+
+	// Extract container spec
+	var imageRef, command string
+	var memoryMB, cpuMillis, port int
+	var env map[string]string
+	var healthCheck models.HealthCheck
+
+	if len(dep.Spec.Template.Spec.Containers) > 0 {
+		c0 := dep.Spec.Template.Spec.Containers[0]
+		imageRef = c0.Image
+		if len(c0.Command) > 2 {
+			command = c0.Command[2] // /bin/sh -c <command>
+		}
+		if len(c0.Ports) > 0 {
+			port = int(c0.Ports[0].ContainerPort)
+		}
+
+		// Parse resources
+		if mem, ok := c0.Resources.Limits[corev1.ResourceMemory]; ok {
+			memoryMB = int(mem.Value() / (1024 * 1024))
+		}
+		if cpu, ok := c0.Resources.Requests[corev1.ResourceCPU]; ok {
+			cpuMillis = int(cpu.MilliValue())
+		}
+
+		// Extract env vars
+		env = make(map[string]string)
+		for _, e := range c0.Env {
+			env[e.Name] = e.Value
+		}
+
+		// Extract health check
+		if c0.ReadinessProbe != nil {
+			if c0.ReadinessProbe.HTTPGet != nil {
+				healthCheck = models.HealthCheck{
+					Type:     models.HealthCheckHTTP,
+					Endpoint: c0.ReadinessProbe.HTTPGet.Path,
+				}
+			} else if c0.ReadinessProbe.TCPSocket != nil {
+				healthCheck = models.HealthCheck{Type: models.HealthCheckPort}
+			}
+		}
+	}
+
+	// Parse annotations
+	diskMB, _ := strconv.Atoi(ann["microfoundry.io/disk-mb"])
+	lifecycleType := ann["microfoundry.io/lifecycle"]
+	if lifecycleType == "" {
+		lifecycleType = "docker"
+	}
+	var buildpacks []string
+	if bp := ann["microfoundry.io/buildpacks"]; bp != "" {
+		buildpacks = strings.Split(bp, ",")
+	}
+
+	// Get image digest from first pod
+	var imageDigest string
+	if len(status.Instances) > 0 {
+		imageDigest = status.Instances[0].ImageID
+	}
+
+	// Get routes
+	routes := c.getAppRoutes(ctx, name)
+
+	// Get secrets
+	secrets := c.listAppSecrets(ctx, name)
+
+	// Parse services from annotation
+	var services []models.ServiceBindingInfo
+	if svcList := ann["microfoundry.io/services"]; svcList != "" {
+		for _, s := range strings.Split(svcList, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				services = append(services, models.ServiceBindingInfo{
+					Name: s, Type: "managed", Status: "bound",
+				})
+			}
+		}
+	}
+
+	state := "stopped"
+	if status.RunningCount > 0 {
+		state = "started"
+	}
+
+	detail := &models.AppDetail{
+		Name:          name,
+		GUID:          ann["microfoundry.io/guid"],
+		State:         state,
+		Organization:  c.Namespace,
+		Owner:         ann["microfoundry.io/owner"],
+		LifecycleType: lifecycleType,
+		Buildpacks:    buildpacks,
+		ImageRef:      imageRef,
+		ImageDigest:   imageDigest,
+		Command:       command,
+		Instances:     int(*dep.Spec.Replicas),
+		RunningCount:  status.RunningCount,
+		MemoryMB:      memoryMB,
+		DiskMB:        diskMB,
+		CPUMillis:     cpuMillis,
+		Port:          port,
+		HealthCheck:   healthCheck,
+		Routes:        routes,
+		Env:           env,
+		Labels:        dep.Labels,
+		Annotations:   ann,
+		Services:      services,
+		Secrets:       secrets,
+		InstanceList:  status.Instances,
+		CreatedAt:     dep.CreationTimestamp.Time,
+	}
+
+	if t, err := time.Parse(time.RFC3339, ann["microfoundry.io/created-at"]); err == nil {
+		detail.CreatedAt = t
+	}
+
+	return detail, nil
+}
+
+// ListAppItems returns enriched app list items from K8s deployments.
+func (c *Client) ListAppItems(ctx context.Context) ([]models.AppListItem, error) {
+	deps, err := c.Clientset.AppsV1().Deployments(c.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/managed-by=" + labelManagedBy,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing apps: %w", err)
+	}
+
+	ingressMap, _ := c.ListIngresses(ctx)
+
+	var items []models.AppListItem
+	for _, dep := range deps.Items {
+		name := dep.Name
+		ann := dep.Annotations
+		if ann == nil {
+			ann = map[string]string{}
+		}
+
+		// Get pod status
+		var runningCount int
+		pods, err := c.Clientset.CoreV1().Pods(c.Namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("app.kubernetes.io/name=%s", name),
+		})
+		if err == nil {
+			for _, pod := range pods.Items {
+				if len(pod.Status.ContainerStatuses) > 0 && pod.Status.ContainerStatuses[0].State.Running != nil {
+					runningCount++
+				}
+			}
+		}
+
+		state := "stopped"
+		if runningCount > 0 {
+			state = "started"
+		}
+
+		// Parse memory from container spec
+		var memoryMB int
+		if len(dep.Spec.Template.Spec.Containers) > 0 {
+			if mem, ok := dep.Spec.Template.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory]; ok {
+				memoryMB = int(mem.Value() / (1024 * 1024))
+			}
+		}
+
+		lifecycleType := ann["microfoundry.io/lifecycle"]
+		if lifecycleType == "" {
+			lifecycleType = "docker"
+		}
+
+		createdAt := dep.CreationTimestamp.Time.Format(time.RFC3339)
+		if t := ann["microfoundry.io/created-at"]; t != "" {
+			createdAt = t
+		}
+
+		item := models.AppListItem{
+			Name:          name,
+			Organization:  c.Namespace,
+			Owner:         ann["microfoundry.io/owner"],
+			State:         state,
+			LifecycleType: lifecycleType,
+			RunningCount:  runningCount,
+			TotalCount:    int(*dep.Spec.Replicas),
+			MemoryMB:      memoryMB,
+			CreatedAt:     createdAt,
+		}
+
+		if hosts, ok := ingressMap[name]; ok {
+			item.Routes = hosts
+		}
+
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
+// getAppRoutes returns detailed route info for an app from its Ingress.
+func (c *Client) getAppRoutes(ctx context.Context, appName string) []models.RouteDetail {
+	ingress, err := c.Clientset.NetworkingV1().Ingresses(c.Namespace).Get(ctx, appName, metav1.GetOptions{})
+	if err != nil {
+		return nil
+	}
+
+	var routes []models.RouteDetail
+	for _, rule := range ingress.Spec.Rules {
+		host := rule.Host
+		// Split host into subdomain.domain
+		hostPart := host
+		domainPart := ""
+		if idx := strings.Index(host, "."); idx > 0 {
+			hostPart = host[:idx]
+			domainPart = host[idx+1:]
+		}
+
+		if rule.HTTP != nil {
+			for _, path := range rule.HTTP.Paths {
+				routes = append(routes, models.RouteDetail{
+					Host:     hostPart,
+					Domain:   domainPart,
+					Path:     path.Path,
+					URL:      host + path.Path,
+					Protocol: "http",
+				})
+			}
+		}
+	}
+
+	return routes
+}
+
+// listAppSecrets returns metadata about K8s Secrets associated with an app.
+func (c *Client) listAppSecrets(ctx context.Context, appName string) []models.SecretInfo {
+	secrets, err := c.Clientset.CoreV1().Secrets(c.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app.kubernetes.io/name=%s", appName),
+	})
+	if err != nil || len(secrets.Items) == 0 {
+		return nil
+	}
+
+	var result []models.SecretInfo
+	for _, s := range secrets.Items {
+		result = append(result, models.SecretInfo{
+			Name:      s.Name,
+			Type:      string(s.Type),
+			KeyCount:  len(s.Data),
+			CreatedAt: s.CreationTimestamp.Format(time.RFC3339),
+		})
+	}
+	return result
 }
 
 // WaitForRollout waits until all pods are ready or timeout.

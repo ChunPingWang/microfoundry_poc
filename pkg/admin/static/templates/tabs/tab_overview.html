@@ -1,0 +1,101 @@
+{{define "tab_overview.html"}}
+<div class="space-y-6">
+    <!-- Info Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-gray-50 rounded-lg p-4">
+            <h4 class="text-sm font-medium text-gray-500 mb-3">Application Info</h4>
+            <dl class="space-y-2">
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">State</dt>
+                    <dd><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{stateBg .State}}">{{.State}}</span></dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Owner</dt>
+                    <dd class="text-sm font-medium text-gray-900">{{if .Owner}}{{.Owner}}{{else}}-{{end}}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Organization</dt>
+                    <dd class="text-sm font-medium text-gray-900">{{.Organization}}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Created</dt>
+                    <dd class="text-sm font-medium text-gray-900">{{timeAgo .CreatedAt}}</dd>
+                </div>
+            </dl>
+        </div>
+        <div class="bg-gray-50 rounded-lg p-4">
+            <h4 class="text-sm font-medium text-gray-500 mb-3">Resources</h4>
+            <dl class="space-y-2">
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Instances</dt>
+                    <dd class="text-sm font-medium text-gray-900">{{.RunningCount}}/{{.Instances}}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Memory</dt>
+                    <dd class="text-sm font-medium text-gray-900">{{memFmt .MemoryMB}}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">CPU</dt>
+                    <dd class="text-sm font-medium text-gray-900">{{if .CPUMillis}}{{.CPUMillis}}m{{else}}-{{end}}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Disk</dt>
+                    <dd class="text-sm font-medium text-gray-900">{{memFmt .DiskMB}}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Routes -->
+    <div>
+        <h4 class="text-sm font-medium text-gray-500 mb-3">Routes</h4>
+        {{if .Routes}}
+        <div class="bg-gray-50 rounded-lg p-4">
+            {{range .Routes}}
+            <div class="flex items-center space-x-2 py-1">
+                <a href="{{.Protocol}}://{{.URL}}" target="_blank" class="text-blue-600 hover:underline text-sm">{{.URL}}</a>
+                <span class="text-xs text-gray-400">{{.Protocol}}</span>
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <p class="text-sm text-gray-400">No routes mapped</p>
+        {{end}}
+    </div>
+
+    <!-- Build Info -->
+    <div>
+        <h4 class="text-sm font-medium text-gray-500 mb-3">Build Info</h4>
+        <div class="bg-gray-50 rounded-lg p-4">
+            <dl class="space-y-2">
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Type</dt>
+                    <dd><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{lifecycleBadge .LifecycleType}}">{{.LifecycleType}}</span></dd>
+                </div>
+                {{if .ImageRef}}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Image</dt>
+                    <dd class="text-sm font-mono text-gray-900">{{.ImageRef}}</dd>
+                </div>
+                {{end}}
+                {{if .ImageDigest}}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Digest</dt>
+                    <dd class="text-sm font-mono text-gray-500 truncate max-w-xs">{{.ImageDigest}}</dd>
+                </div>
+                {{end}}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Health Check</dt>
+                    <dd class="text-sm text-gray-900">{{.HealthCheck.Type}} :{{.Port}}{{if .HealthCheck.Timeout}} (timeout {{.HealthCheck.Timeout}}s){{end}}</dd>
+                </div>
+                {{if .Buildpacks}}
+                <div class="flex justify-between">
+                    <dt class="text-sm text-gray-600">Buildpacks</dt>
+                    <dd class="text-sm text-gray-900">{{join .Buildpacks ", "}}</dd>
+                </div>
+                {{end}}
+            </dl>
+        </div>
+    </div>
+</div>
+{{end}}
