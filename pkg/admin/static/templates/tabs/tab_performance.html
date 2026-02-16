@@ -89,5 +89,33 @@
         </p>
     </div>
     {{end}}
+
+    <!-- Correlated Application Logs (from Loki) -->
+    {{$logs := index . "RecentLogs"}}
+    <div class="bg-white border rounded-lg">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+            <div class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <h4 class="text-sm font-medium text-gray-700">Application Logs</h4>
+                <span class="text-xs text-gray-400">(last 15 minutes via Loki)</span>
+            </div>
+            <a href="/apps/{{index . "Name"}}?tab=logs"
+               hx-get="/apps/{{index . "Name"}}/tab/logs"
+               hx-target="#tab-content"
+               hx-push-url="/apps/{{index . "Name"}}?tab=logs"
+               class="text-xs text-blue-600 hover:underline">View all logs</a>
+        </div>
+        {{if $logs}}
+        <pre class="bg-gray-900 text-green-400 p-4 overflow-y-auto font-mono text-xs leading-relaxed rounded-b-lg" style="max-height: 300px;">
+{{range $logs}}<div class="py-0.5"><span class="text-gray-500">{{.Timestamp.Format "15:04:05"}}</span> <span class="text-blue-400">[{{index .Labels "pod"}}]</span> {{.Line}}</div>{{end}}</pre>
+        {{else}}
+        <div class="p-6 text-center">
+            <p class="text-sm text-gray-400">No recent log entries in the last 15 minutes</p>
+            <p class="text-xs text-gray-300 mt-1">Application logs are collected by Promtail and stored in Loki</p>
+        </div>
+        {{end}}
+    </div>
 </div>
 {{end}}

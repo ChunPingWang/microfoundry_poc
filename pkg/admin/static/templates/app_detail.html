@@ -100,11 +100,11 @@
             {{else if eq $tab "routes"}}
                 {{template "tab_routes.html" $d}}
             {{else if eq $tab "logs"}}
-                {{template "tab_logs.html" $d}}
+                {{template "tab_logs.html" (index $c "LogsData")}}
             {{else if eq $tab "metrics"}}
-                {{template "tab_metrics.html" $c}}
+                {{template "tab_metrics.html" (index $c "MetricsData")}}
             {{else if eq $tab "performance"}}
-                {{template "tab_performance.html" $c}}
+                {{template "tab_performance.html" (index $c "PerfData")}}
             {{end}}
         </div>
     </div>

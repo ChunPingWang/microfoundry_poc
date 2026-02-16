@@ -3,6 +3,9 @@ package admin
 import (
 	"net/http"
 	"strconv"
+	"time"
+
+	"github.com/younjinjeong/microfoundry/pkg/monitoring"
 )
 
 // PageData is the base data passed to every full-page template.
@@ -108,11 +111,61 @@ func (s *Server) AppDetailHandler(w http.ResponseWriter, r *http.Request) {
 		tab = "overview"
 	}
 
-	data := s.pageData(name, "apps")
-	data.Content = map[string]any{
+	content := map[string]any{
 		"Detail": detail,
 		"Tab":    tab,
 	}
+
+	// Enrich context for tabs that need additional data on initial page load
+	if tab == "logs" {
+		var red *monitoring.REDMetrics
+		if s.config.Monitoring.BeylaEnabled {
+			red, _ = s.prometheus.GetAppREDMetrics(ctx, name)
+		}
+		content["LogsData"] = map[string]any{
+			"Name":         name,
+			"RED":          red,
+			"BeylaEnabled": s.config.Monitoring.BeylaEnabled,
+		}
+	}
+	if tab == "performance" {
+		red, _ := s.prometheus.GetAppREDMetrics(ctx, name)
+		namespace := "microfoundry"
+		if client != nil {
+			namespace = client.Namespace
+		}
+		end := time.Now()
+		start := end.Add(-15 * time.Minute)
+		recentLogs, _ := s.loki.QueryLogs(ctx, namespace, name, start, end, 50)
+
+		appParams := map[string]string{"var-app": name}
+		content["PerfData"] = map[string]any{
+			"Name":                   name,
+			"RED":                    red,
+			"BeylaEnabled":           s.config.Monitoring.BeylaEnabled,
+			"RecentLogs":             recentLogs,
+			"GrafanaAppURL":          s.grafana.FullDashboardURL(dashboardPerfUID, appParams),
+			"GrafanaReqRatePanelURL": s.grafana.PanelURL(dashboardPerfUID, 16, appParams),
+			"GrafanaLatencyPanelURL": s.grafana.PanelURL(dashboardPerfUID, 17, appParams),
+			"GrafanaStatusPanelURL":  s.grafana.PanelURL(dashboardPerfUID, 18, appParams),
+			"GrafanaHeatmapPanelURL": s.grafana.PanelURL(dashboardPerfUID, 19, appParams),
+		}
+	}
+	if tab == "metrics" {
+		appParams := map[string]string{"var-app": name}
+		content["MetricsData"] = map[string]any{
+			"Name":                   detail.Name,
+			"GrafanaAppURL":          s.grafana.FullDashboardURL(dashboardAppUID, appParams),
+			"GrafanaCPUPanelURL":     s.grafana.PanelURL(dashboardAppUID, 1, appParams),
+			"GrafanaMemPanelURL":     s.grafana.PanelURL(dashboardAppUID, 2, appParams),
+			"GrafanaNetPanelURL":     s.grafana.PanelURL(dashboardAppUID, 3, appParams),
+			"GrafanaRestartPanelURL": s.grafana.PanelURL(dashboardAppUID, 4, appParams),
+			"GrafanaLogPanelURL":     s.grafana.PanelURL(dashboardAppUID, 5, appParams),
+		}
+	}
+
+	data := s.pageData(name, "apps")
+	data.Content = content
 	s.templates.Render(w, "app_detail.html", data)
 }
 
@@ -146,9 +199,15 @@ func (s *Server) AppTabHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Performance tab uses dedicated handler with RED metrics
+	// Performance tab uses dedicated handler with RED metrics + logs
 	if tab == "performance" {
 		s.AppPerformanceTabHandler(w, r, name)
+		return
+	}
+
+	// Logs tab uses dedicated handler with RED metrics summary
+	if tab == "logs" {
+		s.AppLogsTabHandler(w, r, name)
 		return
 	}
 

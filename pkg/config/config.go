@@ -126,7 +126,7 @@ func Load() (*Config, error) {
 	v.SetDefault("github.repo", "microfoundry")
 	v.SetDefault("kubernetes.context", "docker-desktop")
 	v.SetDefault("kubernetes.namespace", "microfoundry")
-	v.SetDefault("monitoring.grafana_url", "http://grafana.cf-local.dev")
+	v.SetDefault("monitoring.grafana_url", "http://localhost:3000")
 	v.SetDefault("monitoring.loki_url", "http://loki.monitoring.svc.cluster.local:3100")
 	v.SetDefault("monitoring.alertmanager_url", "http://kube-prometheus-kube-prome-alertmanager.monitoring.svc.cluster.local:9093")
 	v.SetDefault("monitoring.prometheus_url", "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090")

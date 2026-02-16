@@ -41,7 +41,7 @@ metadata:
   name: beyla
 rules:
   - apiGroups: [""]
-    resources: ["pods", "nodes"]
+    resources: ["pods", "nodes", "services", "endpoints", "namespaces"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
@@ -96,16 +96,20 @@ spec:
           env:
             - name: BEYLA_CONFIG_PATH
               value: /config/beyla-config.yml
+            - name: BEYLA_BPF_BATCH_MAP_SIZE
+              value: "32"
+            - name: BEYLA_OPEN_PORT
+              value: "80,443,8080,8443,3000,9090"
           volumeMounts:
             - name: beyla-config
               mountPath: /config
               readOnly: true
           resources:
             requests:
-              memory: 64Mi
-              cpu: 50m
-            limits:
               memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
       volumes:
         - name: beyla-config
           configMap:

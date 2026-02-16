@@ -150,6 +150,7 @@ func (s *Server) registerRoutes() {
 	// Beyla RED metrics API routes
 	s.mux.HandleFunc("GET /api/apps/{name}/red-metrics", s.APIAppREDMetricsHandler)
 	s.mux.HandleFunc("GET /api/apps/{name}/health", s.APIAppHealthHandler)
+	s.mux.HandleFunc("GET /api/apps/{name}/observability", s.APIAppObservabilityHandler)
 }
 
 func (s *Server) ListenAndServe(addr string) error {
