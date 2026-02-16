@@ -75,7 +75,7 @@ func (s *Server) TopologyDetailHandler(w http.ResponseWriter, r *http.Request) {
 		content["Files"] = topo.Files
 	}
 
-	data := s.pageData(serviceType+"/"+planID, "topologies")
+	data := s.pageData(serviceType+"/"+planID, "catalog")
 	data.Content = content
 	s.templates.Render(w, "topology_detail.html", data)
 }
@@ -231,7 +231,7 @@ func (s *Server) TopologyPreviewHandler(w http.ResponseWriter, r *http.Request) 
 
 // TopologyUploadHandler shows the upload form.
 func (s *Server) TopologyUploadHandler(w http.ResponseWriter, r *http.Request) {
-	data := s.pageData("Upload Topology", "topologies")
+	data := s.pageData("Upload Topology", "catalog")
 	data.Content = map[string]any{
 		"ServiceTypes": service.Catalog(),
 	}
@@ -300,7 +300,7 @@ func (s *Server) UploadTopologyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/topologies/"+serviceType+"/"+planID, http.StatusSeeOther)
+	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
 }
 
 // DeleteTopologyHandler removes a topology config.
@@ -323,11 +323,11 @@ func (s *Server) DeleteTopologyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// HTMX-compatible: redirect on delete
 	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", "/topologies")
+		w.Header().Set("HX-Redirect", "/catalog")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	http.Redirect(w, r, "/topologies", http.StatusSeeOther)
+	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
 }
 
 // --- JSON API Handlers ---
