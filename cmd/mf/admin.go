@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/younjinjeong/microfoundry/pkg/admin"
 	"github.com/younjinjeong/microfoundry/pkg/config"
 	"github.com/younjinjeong/microfoundry/pkg/k8s"
+	"github.com/younjinjeong/microfoundry/pkg/monitoring"
 )
 
 func adminCmd() *cobra.Command {
@@ -28,6 +31,12 @@ func adminCmd() *cobra.Command {
 			)
 
 			srv := admin.NewServer(clientManager, cfg, version)
+
+			// Start background metrics collector
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go monitoring.StartCollector(ctx, srv.GetMetrics(), clientManager, 30*time.Second)
+
 			addr := fmt.Sprintf("%s:%d", host, port)
 			fmt.Printf("MicroFoundry Admin starting at http://localhost:%d\n", port)
 			fmt.Printf("Active cluster: %s\n", cfg.Kubernetes.Active)

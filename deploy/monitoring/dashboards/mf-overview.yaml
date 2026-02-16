@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-mf-overview
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  mf-overview.json: |
+    {
+      "uid": "mf-overview",
+      "title": "MicroFoundry Overview",
+      "tags": ["microfoundry"],
+      "timezone": "browser",
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Total Applications",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "targets": [{ "expr": "sum(microfoundry_apps_total)", "legendFormat": "Apps" }],
+          "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "blue", "value": 0 }] } } }
+        },
+        {
+          "id": 2,
+          "title": "Running Apps",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "targets": [{ "expr": "count(microfoundry_apps_running > 0)", "legendFormat": "Running" }],
+          "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "green", "value": 0 }] } } }
+        },
+        {
+          "id": 3,
+          "title": "Service Instances",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "targets": [{ "expr": "sum(microfoundry_services_total)", "legendFormat": "Services" }],
+          "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "purple", "value": 0 }] } } }
+        },
+        {
+          "id": 4,
+          "title": "HTTP Request Rate",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "targets": [{ "expr": "sum(rate(microfoundry_http_requests_total[5m]))", "legendFormat": "req/s" }],
+          "fieldConfig": { "defaults": { "unit": "reqps", "thresholds": { "steps": [{ "color": "orange", "value": 0 }] } } }
+        },
+        {
+          "id": 5,
+          "title": "Deploy Events",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "targets": [
+            { "expr": "sum(rate(microfoundry_deploy_total{result=\"success\"}[5m]))", "legendFormat": "Success" },
+            { "expr": "sum(rate(microfoundry_deploy_errors_total[5m]))", "legendFormat": "Errors" }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "HTTP Request Duration (p95)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(microfoundry_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" }],
+          "fieldConfig": { "defaults": { "unit": "s" } }
+        },
+        {
+          "id": 7,
+          "title": "HTTP Requests by Path",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+          "targets": [{ "expr": "sum(rate(microfoundry_http_requests_total[5m])) by (path)", "legendFormat": "{{ path }}" }]
+        },
+        {
+          "id": 8,
+          "title": "Scale & Service Events",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+          "targets": [
+            { "expr": "sum(rate(microfoundry_scale_events_total[5m]))", "legendFormat": "Scale" },
+            { "expr": "sum(rate(microfoundry_service_provision_total[5m]))", "legendFormat": "Provision" },
+            { "expr": "sum(rate(microfoundry_service_bind_total[5m]))", "legendFormat": "Bind/Unbind" }
+          ]
+        }
+      ],
+      "schemaVersion": 39
+    }

@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-mf-app-detail
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  mf-app-detail.json: |
+    {
+      "uid": "mf-app-detail",
+      "title": "MicroFoundry App Detail",
+      "tags": ["microfoundry", "app"],
+      "timezone": "browser",
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "app",
+            "type": "custom",
+            "current": { "text": "hello-world", "value": "hello-world" },
+            "query": "",
+            "label": "Application"
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "CPU Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [{
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"microfoundry\", pod=~\"$app.*\", container!=\"\"}[5m])) by (pod)",
+            "legendFormat": "{{ pod }}"
+          }],
+          "fieldConfig": { "defaults": { "unit": "percentunit" } }
+        },
+        {
+          "id": 2,
+          "title": "Memory Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [{
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"microfoundry\", pod=~\"$app.*\", container!=\"\"}) by (pod)",
+            "legendFormat": "{{ pod }}"
+          }],
+          "fieldConfig": { "defaults": { "unit": "bytes" } }
+        },
+        {
+          "id": 3,
+          "title": "Network I/O",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            {
+              "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"microfoundry\", pod=~\"$app.*\"}[5m])) by (pod)",
+              "legendFormat": "{{ pod }} RX"
+            },
+            {
+              "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"microfoundry\", pod=~\"$app.*\"}[5m])) by (pod)",
+              "legendFormat": "{{ pod }} TX"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "Bps" } }
+        },
+        {
+          "id": 4,
+          "title": "Pod Restarts",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [{
+            "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"microfoundry\", pod=~\"$app.*\"}) by (pod)",
+            "legendFormat": "{{ pod }}"
+          }]
+        },
+        {
+          "id": 5,
+          "title": "Application Logs",
+          "type": "logs",
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+          "targets": [{
+            "expr": "{namespace=\"microfoundry\", app=\"$app\"}",
+            "refId": "A"
+          }],
+          "datasource": { "type": "loki", "uid": "" },
+          "options": { "showTime": true, "sortOrder": "Descending", "enableLogDetails": true }
+        }
+      ],
+      "schemaVersion": 39
+    }

@@ -2,9 +2,12 @@ package admin
 
 import (
 	"net/http"
+	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/younjinjeong/microfoundry/pkg/config"
 	"github.com/younjinjeong/microfoundry/pkg/k8s"
+	"github.com/younjinjeong/microfoundry/pkg/monitoring"
 )
 
 type Server struct {
@@ -13,18 +16,41 @@ type Server struct {
 	version       string
 	templates     *TemplateRenderer
 	mux           *http.ServeMux
+	metrics       *monitoring.Metrics
+	grafana       *monitoring.GrafanaConfig
+	loki          *monitoring.LokiClient
+	alertmanager  *monitoring.AlertmanagerClient
 }
 
 func NewServer(clientManager *k8s.ClientManager, cfg *config.Config, version string) *Server {
+	metrics := monitoring.NewMetrics(prometheus.DefaultRegisterer)
+
 	s := &Server{
 		clientManager: clientManager,
 		config:        cfg,
 		version:       version,
 		templates:     NewTemplateRenderer(),
 		mux:           http.NewServeMux(),
+		metrics:       metrics,
+		grafana: &monitoring.GrafanaConfig{
+			BaseURL: cfg.Monitoring.GrafanaURL,
+		},
+		loki: &monitoring.LokiClient{
+			BaseURL:    cfg.Monitoring.LokiURL,
+			HTTPClient: &http.Client{Timeout: 10 * time.Second},
+		},
+		alertmanager: &monitoring.AlertmanagerClient{
+			BaseURL:    cfg.Monitoring.AlertmanagerURL,
+			HTTPClient: &http.Client{Timeout: 10 * time.Second},
+		},
 	}
 	s.registerRoutes()
 	return s
+}
+
+// GetMetrics returns the metrics instance for external use (e.g., background collector).
+func (s *Server) GetMetrics() *monitoring.Metrics {
+	return s.metrics
 }
 
 // getClient resolves the active K8s client for the current request.
@@ -40,6 +66,9 @@ func (s *Server) registerRoutes() {
 	// Static CSS files
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(staticFS())))
 
+	// Prometheus metrics endpoint
+	s.mux.Handle("GET /metrics", monitoring.Handler())
+
 	// Page routes
 	s.mux.HandleFunc("GET /{$}", s.DashboardHandler)
 	s.mux.HandleFunc("GET /apps", s.AppsListHandler)
@@ -47,6 +76,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /apps/{name}/tab/{tab}", s.AppTabHandler)
 	s.mux.HandleFunc("GET /apps/{name}/instances", s.AppInstancesHandler)
 	s.mux.HandleFunc("GET /apps/{name}/logs/stream", s.LogStreamHandler)
+	s.mux.HandleFunc("GET /apps/{name}/logs/history", s.LogHistoryHandler)
 	s.mux.HandleFunc("GET /config", s.ConfigHandler)
 	s.mux.HandleFunc("GET /services", s.ServicesListHandler)
 	s.mux.HandleFunc("GET /services/{name}", s.ServiceDetailHandler)
@@ -63,6 +93,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /secrets", s.CreateSecretHandler)
 	s.mux.HandleFunc("DELETE /secrets/{name}", s.DeleteSecretHandler)
 	s.mux.HandleFunc("GET /users", s.UsersHandler)
+
+	// Monitoring routes
+	s.mux.HandleFunc("GET /monitoring", s.MonitoringHandler)
+	s.mux.HandleFunc("GET /monitoring/alerts", s.AlertsListHandler)
 
 	// Catalog visibility routes
 	s.mux.HandleFunc("POST /catalog/{type}/{plan}/visibility", s.TogglePlanVisibilityHandler)
@@ -93,6 +127,7 @@ func (s *Server) registerRoutes() {
 	// JSON API routes
 	s.mux.HandleFunc("GET /api/apps", s.APIListAppsHandler)
 	s.mux.HandleFunc("GET /api/apps/{name}", s.APIGetAppHandler)
+	s.mux.HandleFunc("GET /api/apps/{name}/logs/history", s.APILogHistoryHandler)
 	s.mux.HandleFunc("GET /api/config", s.APIGetConfigHandler)
 	s.mux.HandleFunc("POST /api/apps/{name}/scale", s.APIScaleAppHandler)
 	s.mux.HandleFunc("DELETE /api/apps/{name}", s.APIDeleteAppHandler)
@@ -108,8 +143,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/topologies", s.APITopologiesListHandler)
 	s.mux.HandleFunc("GET /api/topologies/{type}/{plan}", s.APITopologyDetailHandler)
 	s.mux.HandleFunc("PUT /api/topologies/{type}/{plan}", s.APISaveTopologyHandler)
+	s.mux.HandleFunc("GET /api/monitoring/alerts", s.APIAlertsHandler)
 }
 
 func (s *Server) ListenAndServe(addr string) error {
-	return http.ListenAndServe(addr, s.mux)
+	handler := monitoring.InstrumentHandler(s.metrics, s.mux)
+	return http.ListenAndServe(addr, handler)
 }
