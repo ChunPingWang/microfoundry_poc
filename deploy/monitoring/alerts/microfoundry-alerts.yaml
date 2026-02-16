@@ -54,3 +54,37 @@ spec:
           annotations:
             summary: "Service provisioning failures detected"
             description: "Service provisioning errors occurred in the last 10 minutes."
+
+    - name: microfoundry.beyla.alerts
+      rules:
+        - alert: MFAppHighErrorRate
+          expr: microfoundry:http_error_rate:5m > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            source: beyla
+          annotations:
+            summary: "App {{ $labels.k8s_deployment_name }} has >5% error rate"
+            description: "Application {{ $labels.k8s_deployment_name }} has a 5xx error rate of {{ $value | humanizePercentage }} over the last 5 minutes."
+
+        - alert: MFAppHighLatency
+          expr: microfoundry:http_latency_p99:5m > 2
+          for: 5m
+          labels:
+            severity: warning
+            source: beyla
+          annotations:
+            summary: "App {{ $labels.k8s_deployment_name }} p99 latency >2s"
+            description: "Application {{ $labels.k8s_deployment_name }} has a p99 latency of {{ $value | humanizeDuration }} over the last 5 minutes."
+
+        - alert: MFAppNoTraffic
+          expr: |
+            microfoundry:http_request_rate:5m == 0
+            and on(k8s_deployment_name) (kube_deployment_status_replicas_available{namespace="microfoundry"} > 0)
+          for: 15m
+          labels:
+            severity: info
+            source: beyla
+          annotations:
+            summary: "App {{ $labels.k8s_deployment_name }} has zero traffic"
+            description: "Application {{ $labels.k8s_deployment_name }} is running but received no HTTP traffic in the last 15 minutes."

@@ -21,6 +21,8 @@ type MonitoringConfig struct {
 	GrafanaURL      string `mapstructure:"grafana_url"`
 	LokiURL         string `mapstructure:"loki_url"`
 	AlertmanagerURL string `mapstructure:"alertmanager_url"`
+	PrometheusURL   string `mapstructure:"prometheus_url"`
+	BeylaEnabled    bool   `mapstructure:"beyla_enabled"`
 }
 
 type GitHubConfig struct {
@@ -127,6 +129,8 @@ func Load() (*Config, error) {
 	v.SetDefault("monitoring.grafana_url", "http://grafana.cf-local.dev")
 	v.SetDefault("monitoring.loki_url", "http://loki.monitoring.svc.cluster.local:3100")
 	v.SetDefault("monitoring.alertmanager_url", "http://kube-prometheus-kube-prome-alertmanager.monitoring.svc.cluster.local:9093")
+	v.SetDefault("monitoring.prometheus_url", "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090")
+	v.SetDefault("monitoring.beyla_enabled", true)
 
 	// Read config file (optional — not an error if missing)
 	if err := v.ReadInConfig(); err != nil {

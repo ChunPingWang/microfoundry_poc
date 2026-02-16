@@ -34,3 +34,5 @@ monitoring:
   grafana_url: "http://grafana.cf-local.dev"
   loki_url: "http://loki.monitoring.svc.cluster.local:3100"
   alertmanager_url: "http://kube-prometheus-kube-prome-alertmanager.monitoring.svc.cluster.local:9093"
+  prometheus_url: "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090"
+  beyla_enabled: true
