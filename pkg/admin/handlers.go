@@ -120,6 +120,7 @@ func (s *Server) AppDetailHandler(w http.ResponseWriter, r *http.Request) {
 var validTabs = map[string]bool{
 	"overview": true, "instances": true, "config": true,
 	"services": true, "routes": true, "logs": true,
+	"metrics": true,
 }
 
 // AppTabHandler serves individual tab content as HTMX partials.
@@ -142,6 +143,22 @@ func (s *Server) AppTabHandler(w http.ResponseWriter, r *http.Request) {
 	detail, err := client.GetAppDetail(ctx, name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Metrics tab needs Grafana panel URLs
+	if tab == "metrics" {
+		appParams := map[string]string{"var-app": name}
+		metricsData := map[string]any{
+			"Name":                   detail.Name,
+			"GrafanaAppURL":          s.grafana.FullDashboardURL(dashboardAppUID, appParams),
+			"GrafanaCPUPanelURL":     s.grafana.PanelURL(dashboardAppUID, 1, appParams),
+			"GrafanaMemPanelURL":     s.grafana.PanelURL(dashboardAppUID, 2, appParams),
+			"GrafanaNetPanelURL":     s.grafana.PanelURL(dashboardAppUID, 3, appParams),
+			"GrafanaRestartPanelURL": s.grafana.PanelURL(dashboardAppUID, 4, appParams),
+			"GrafanaLogPanelURL":     s.grafana.PanelURL(dashboardAppUID, 5, appParams),
+		}
+		s.templates.RenderPartial(w, "tab_metrics.html", metricsData)
 		return
 	}
 
@@ -193,6 +210,8 @@ func (s *Server) ScaleAppHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	s.metrics.ScaleEvents.WithLabelValues(s.clientManager.GetActive(), name).Inc()
 
 	// Return updated app row via ListAppItems
 	items, _ := client.ListAppItems(ctx)

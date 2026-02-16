@@ -195,6 +195,8 @@ func (s *Server) CreateServiceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.metrics.ServiceProvision.WithLabelValues(serviceType, plan, "success").Inc()
+
 	// Provisioning happens async in manager.Create — redirect to detail page
 	w.Header().Set("HX-Redirect", "/services/"+name)
 	w.WriteHeader(http.StatusOK)
@@ -241,6 +243,8 @@ func (s *Server) BindServiceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.metrics.ServiceBind.WithLabelValues(name, appName, "bind").Inc()
+
 	w.Header().Set("HX-Redirect", "/services/"+name)
 	w.WriteHeader(http.StatusOK)
 }
@@ -274,6 +278,8 @@ func (s *Server) UnbindServiceHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "removing binding: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	s.metrics.ServiceBind.WithLabelValues(name, appName, "unbind").Inc()
 
 	w.Header().Set("HX-Redirect", "/services/"+name)
 	w.WriteHeader(http.StatusOK)

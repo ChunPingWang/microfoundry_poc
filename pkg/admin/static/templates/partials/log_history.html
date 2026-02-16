@@ -1,0 +1,10 @@
+{{define "log_history.html"}}
+{{$entries := index . "Entries"}}
+{{if $entries}}
+<pre class="bg-gray-900 text-green-400 p-4 overflow-y-auto font-mono text-xs leading-relaxed rounded-lg" style="max-height: 400px;">
+{{range $entries}}<div class="py-0.5"><span class="text-gray-500">{{.Timestamp.Format "2006-01-02 15:04:05"}}</span> {{.Line}}</div>{{end}}</pre>
+<p class="text-xs text-gray-400 mt-2">{{len $entries}} log entries for the last {{index . "Duration"}}</p>
+{{else}}
+<p class="text-sm text-gray-400 text-center py-4">No log entries found for the selected time range</p>
+{{end}}
+{{end}}

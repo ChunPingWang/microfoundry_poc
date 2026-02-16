@@ -33,3 +33,6 @@ docker-run:
 
 install: build
 	cp $(BUILD_DIR)/$(BINARY_NAME) $(GOPATH)/bin/$(BINARY_NAME)
+
+monitoring-install:
+	bash deploy/monitoring/install.sh

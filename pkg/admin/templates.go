@@ -155,6 +155,7 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"secret_create.html",
 		"topology_detail.html",
 		"topology_upload.html",
+		"monitoring.html",
 	}
 
 	pages := make(map[string]*template.Template, len(pageFiles)+3)
@@ -181,6 +182,9 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"tab_services.html":  base,
 		"tab_routes.html":    base,
 		"tab_logs.html":      base,
+		"tab_metrics.html":   base,
+		"alerts_list.html":   base,
+		"log_history.html":   base,
 	}
 
 	return &TemplateRenderer{base: base, pages: pages, partials: partials}

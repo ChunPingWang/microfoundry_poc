@@ -1,0 +1,56 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: microfoundry-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: microfoundry.rules
+      rules:
+        - alert: MFAppDown
+          expr: microfoundry_apps_running == 0 and microfoundry_apps_desired > 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "App {{ $labels.app }} has zero running instances"
+            description: "Application {{ $labels.app }} in namespace {{ $labels.namespace }} has 0 running pods but {{ $value }} desired."
+
+        - alert: MFHighPodRestartRate
+          expr: rate(kube_pod_container_status_restarts_total{namespace="microfoundry"}[15m]) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} is restarting frequently"
+            description: "Pod {{ $labels.pod }} in namespace microfoundry has a high restart rate."
+
+        - alert: MFHighMemoryUsage
+          expr: |
+            (container_memory_working_set_bytes{namespace="microfoundry", container!=""}
+            / on(pod, container) container_spec_memory_limit_bytes{namespace="microfoundry", container!=""}) > 0.9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container {{ $labels.container }} using >90% memory"
+            description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is using more than 90% of its memory limit."
+
+        - alert: MFDeploymentFailed
+          expr: increase(microfoundry_deploy_errors_total[10m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: "Deployment failures detected"
+            description: "MicroFoundry deployment errors occurred in the last 10 minutes."
+
+        - alert: MFServiceProvisionFailed
+          expr: increase(microfoundry_service_provision_total{result="error"}[10m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Service provisioning failures detected"
+            description: "Service provisioning errors occurred in the last 10 minutes."

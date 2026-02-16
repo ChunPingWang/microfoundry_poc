@@ -13,6 +13,14 @@ import (
 type Config struct {
 	GitHub     GitHubConfig     `mapstructure:"github"`
 	Kubernetes KubernetesConfig `mapstructure:"kubernetes"`
+	Monitoring MonitoringConfig `mapstructure:"monitoring"`
+}
+
+// MonitoringConfig holds endpoints for the monitoring stack.
+type MonitoringConfig struct {
+	GrafanaURL      string `mapstructure:"grafana_url"`
+	LokiURL         string `mapstructure:"loki_url"`
+	AlertmanagerURL string `mapstructure:"alertmanager_url"`
 }
 
 type GitHubConfig struct {
@@ -116,6 +124,9 @@ func Load() (*Config, error) {
 	v.SetDefault("github.repo", "microfoundry")
 	v.SetDefault("kubernetes.context", "docker-desktop")
 	v.SetDefault("kubernetes.namespace", "microfoundry")
+	v.SetDefault("monitoring.grafana_url", "http://grafana.cf-local.dev")
+	v.SetDefault("monitoring.loki_url", "http://loki.monitoring.svc.cluster.local:3100")
+	v.SetDefault("monitoring.alertmanager_url", "http://kube-prometheus-kube-prome-alertmanager.monitoring.svc.cluster.local:9093")
 
 	// Read config file (optional — not an error if missing)
 	if err := v.ReadInConfig(); err != nil {

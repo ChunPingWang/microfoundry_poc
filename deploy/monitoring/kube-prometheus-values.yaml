@@ -1,0 +1,82 @@
+# Helm values for prometheus-community/kube-prometheus-stack
+# Optimized for Docker Desktop Kubernetes (local development)
+
+grafana:
+  adminPassword: "microfoundry"
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.cf-local.dev
+  grafana.ini:
+    server:
+      root_url: "http://grafana.cf-local.dev"
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+    security:
+      allow_embedding: true
+      cookie_samesite: none
+    auth:
+      disable_login_form: false
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: monitoring
+    datasources:
+      enabled: true
+      label: grafana_datasource
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    storageSpec: {}
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    additionalScrapeConfigs:
+      - job_name: "microfoundry"
+        scrape_interval: 15s
+        static_configs:
+          - targets: ["host.docker.internal:8080"]
+            labels:
+              app: microfoundry
+              component: admin
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+# Disable components not accessible on Docker Desktop
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
