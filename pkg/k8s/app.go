@@ -121,7 +121,15 @@ func (c *Client) DeployApp(ctx context.Context, app models.App, routes []models.
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{MatchLabels: labels},
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+					Annotations: map[string]string{
+						"microfoundry.io/observable": "true",
+						"prometheus.io/scrape":       "true",
+						"prometheus.io/port":         fmt.Sprintf("%d", app.Port),
+						"prometheus.io/path":         "/metrics",
+					},
+				},
 				Spec:       corev1.PodSpec{Containers: []corev1.Container{container}},
 			},
 		},

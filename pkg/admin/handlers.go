@@ -120,7 +120,7 @@ func (s *Server) AppDetailHandler(w http.ResponseWriter, r *http.Request) {
 var validTabs = map[string]bool{
 	"overview": true, "instances": true, "config": true,
 	"services": true, "routes": true, "logs": true,
-	"metrics": true,
+	"metrics": true, "performance": true,
 }
 
 // AppTabHandler serves individual tab content as HTMX partials.
@@ -143,6 +143,12 @@ func (s *Server) AppTabHandler(w http.ResponseWriter, r *http.Request) {
 	detail, err := client.GetAppDetail(ctx, name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Performance tab uses dedicated handler with RED metrics
+	if tab == "performance" {
+		s.AppPerformanceTabHandler(w, r, name)
 		return
 	}
 

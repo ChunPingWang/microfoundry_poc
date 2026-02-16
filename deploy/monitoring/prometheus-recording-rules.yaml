@@ -1,0 +1,73 @@
+# Prometheus recording rules for Netflix Atlas-style normalized RED metrics
+# Pre-computes per-app request rate, error rate, and latency percentiles from Beyla data
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: microfoundry-beyla-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: microfoundry.beyla.recording
+      interval: 15s
+      rules:
+        # Normalized request rate per app (Netflix IPC equivalent)
+        - record: microfoundry:http_request_rate:5m
+          expr: |
+            sum by (k8s_deployment_name, k8s_namespace_name) (
+              rate(http_server_request_duration_seconds_count{k8s_namespace_name="microfoundry"}[5m])
+            )
+          labels:
+            source: beyla
+
+        # Normalized error rate per app (5xx / total)
+        - record: microfoundry:http_error_rate:5m
+          expr: |
+            (
+              sum by (k8s_deployment_name, k8s_namespace_name) (
+                rate(http_server_request_duration_seconds_count{k8s_namespace_name="microfoundry", http_response_status_code=~"5.."}[5m])
+              )
+            )
+            /
+            (
+              sum by (k8s_deployment_name, k8s_namespace_name) (
+                rate(http_server_request_duration_seconds_count{k8s_namespace_name="microfoundry"}[5m])
+              ) > 0
+            )
+          labels:
+            source: beyla
+
+        # Normalized p50 latency per app
+        - record: microfoundry:http_latency_p50:5m
+          expr: |
+            histogram_quantile(0.50,
+              sum by (k8s_deployment_name, le) (
+                rate(http_server_request_duration_seconds_bucket{k8s_namespace_name="microfoundry"}[5m])
+              )
+            )
+          labels:
+            source: beyla
+
+        # Normalized p95 latency per app
+        - record: microfoundry:http_latency_p95:5m
+          expr: |
+            histogram_quantile(0.95,
+              sum by (k8s_deployment_name, le) (
+                rate(http_server_request_duration_seconds_bucket{k8s_namespace_name="microfoundry"}[5m])
+              )
+            )
+          labels:
+            source: beyla
+
+        # Normalized p99 latency per app
+        - record: microfoundry:http_latency_p99:5m
+          expr: |
+            histogram_quantile(0.99,
+              sum by (k8s_deployment_name, le) (
+                rate(http_server_request_duration_seconds_bucket{k8s_namespace_name="microfoundry"}[5m])
+              )
+            )
+          labels:
+            source: beyla

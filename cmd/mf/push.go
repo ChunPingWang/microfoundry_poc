@@ -163,6 +163,8 @@ func pushCmd() *cobra.Command {
 			}
 			fmt.Printf("memory:     %dM\n", app.MemoryMB)
 			fmt.Printf("disk:       %dM\n", app.DiskMB)
+			fmt.Printf("metrics:    auto-instrumented (Beyla eBPF)\n")
+			fmt.Printf("dashboard:  http://localhost:8080/apps/%s?tab=performance\n", app.Name)
 			fmt.Println()
 
 			return nil

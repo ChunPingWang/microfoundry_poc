@@ -20,6 +20,7 @@ type Server struct {
 	grafana       *monitoring.GrafanaConfig
 	loki          *monitoring.LokiClient
 	alertmanager  *monitoring.AlertmanagerClient
+	prometheus    *monitoring.PrometheusClient
 }
 
 func NewServer(clientManager *k8s.ClientManager, cfg *config.Config, version string) *Server {
@@ -43,6 +44,7 @@ func NewServer(clientManager *k8s.ClientManager, cfg *config.Config, version str
 			BaseURL:    cfg.Monitoring.AlertmanagerURL,
 			HTTPClient: &http.Client{Timeout: 10 * time.Second},
 		},
+		prometheus: monitoring.NewPrometheusClient(cfg.Monitoring.PrometheusURL),
 	}
 	s.registerRoutes()
 	return s
@@ -144,6 +146,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/topologies/{type}/{plan}", s.APITopologyDetailHandler)
 	s.mux.HandleFunc("PUT /api/topologies/{type}/{plan}", s.APISaveTopologyHandler)
 	s.mux.HandleFunc("GET /api/monitoring/alerts", s.APIAlertsHandler)
+
+	// Beyla RED metrics API routes
+	s.mux.HandleFunc("GET /api/apps/{name}/red-metrics", s.APIAppREDMetricsHandler)
+	s.mux.HandleFunc("GET /api/apps/{name}/health", s.APIAppHealthHandler)
 }
 
 func (s *Server) ListenAndServe(addr string) error {
