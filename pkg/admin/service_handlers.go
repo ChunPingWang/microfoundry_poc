@@ -7,7 +7,25 @@ import (
 
 	"github.com/younjinjeong/microfoundry/pkg/models"
 	"github.com/younjinjeong/microfoundry/pkg/service"
+	"github.com/younjinjeong/microfoundry/pkg/terraform"
 )
+
+// CatalogPageItem represents one service type with enriched plan data for the admin catalog.
+type CatalogPageItem struct {
+	ServiceType  models.ServiceType
+	Plans        []CatalogPlanItem
+	VisibleCount int
+}
+
+// CatalogPlanItem represents a single plan with topology and visibility info.
+type CatalogPlanItem struct {
+	Plan        models.ServicePlan
+	HasTopology bool
+	TopologyVer int
+	FileCount   int
+	IsVisible   bool
+	Provisioner string
+}
 
 // ServicesListHandler shows all provisioned service instances.
 func (s *Server) ServicesListHandler(w http.ResponseWriter, r *http.Request) {
@@ -62,13 +80,63 @@ func (s *Server) ServiceDetailHandler(w http.ResponseWriter, r *http.Request) {
 	s.templates.Render(w, "service_detail.html", data)
 }
 
-// CatalogHandler shows the service catalog.
+// CatalogHandler shows the admin service catalog with topology and visibility info.
 func (s *Server) CatalogHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	catalog := service.Catalog()
+
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	// Load topology status for all plans
+	topoStore := terraform.NewTopologyStore(client)
+	topoItems, _ := topoStore.List(ctx, catalog)
+	topoMap := make(map[string]models.TopologyListItem)
+	for _, item := range topoItems {
+		topoMap[models.PlanKey(item.ServiceType, item.PlanID)] = item
+	}
+
+	// Load visibility settings
+	visStore := service.NewPlanVisibilityStore(client)
+	visibility, _ := visStore.GetAll(ctx)
+
+	// Build enriched catalog items
+	var items []CatalogPageItem
+	for _, svc := range catalog {
+		pageItem := CatalogPageItem{ServiceType: svc}
+		for _, plan := range svc.Plans {
+			key := models.PlanKey(svc.ID, plan.ID)
+			topo := topoMap[key]
+
+			provisioner := "K8s Native"
+			if topo.HasTopology {
+				provisioner = fmt.Sprintf("Terraform v%d", topo.Version)
+			}
+
+			visible := visibility.Plans[key]
+			if visible {
+				pageItem.VisibleCount++
+			}
+
+			pageItem.Plans = append(pageItem.Plans, CatalogPlanItem{
+				Plan:        plan,
+				HasTopology: topo.HasTopology,
+				TopologyVer: topo.Version,
+				FileCount:   topo.FileCount,
+				IsVisible:   visible,
+				Provisioner: provisioner,
+			})
+		}
+		items = append(items, pageItem)
+	}
 
 	data := s.pageData("Service Catalog", "catalog")
 	data.Content = map[string]any{
-		"Catalog": catalog,
+		"Items":              items,
+		"TerraformAvailable": terraform.IsAvailable(),
 	}
 	s.templates.Render(w, "catalog.html", data)
 }
@@ -288,7 +356,87 @@ func (s *Server) APIServiceDetailHandler(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, redacted)
 }
 
-// APICatalogHandler returns the service catalog as JSON.
+// APICatalogHandler returns the full service catalog as JSON.
 func (s *Server) APICatalogHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, service.Catalog())
+}
+
+// APIVisibleCatalogHandler returns only user-visible plans as JSON.
+func (s *Server) APIVisibleCatalogHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	client, err := s.getClient(r)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+
+	visStore := service.NewPlanVisibilityStore(client)
+	visible, err := visStore.VisibleCatalog(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, visible)
+}
+
+// TogglePlanVisibilityHandler toggles a single plan's user visibility (HTMX).
+func (s *Server) TogglePlanVisibilityHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	serviceType := r.PathValue("type")
+	planID := r.PathValue("plan")
+
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	visible := r.FormValue("visible") == "true"
+
+	visStore := service.NewPlanVisibilityStore(client)
+	if err := visStore.SetPlanVisibility(ctx, serviceType, planID, visible); err != nil {
+		http.Error(w, "Failed to update visibility: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return updated toggle HTML for HTMX swap
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if visible {
+		fmt.Fprintf(w, `<button hx-post="/catalog/%s/%s/visibility" hx-swap="outerHTML" hx-vals='{"visible":"false"}'
+			class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer">
+			<svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+			Visible</button>`, serviceType, planID)
+	} else {
+		fmt.Fprintf(w, `<button hx-post="/catalog/%s/%s/visibility" hx-swap="outerHTML" hx-vals='{"visible":"true"}'
+			class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 cursor-pointer">
+			<svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-14-14zM10 18a8 8 0 100-16 8 8 0 000 16z" clip-rule="evenodd"/></svg>
+			Hidden</button>`, serviceType, planID)
+	}
+}
+
+// ToggleServiceVisibilityHandler toggles all plans of a service type (HTMX).
+func (s *Server) ToggleServiceVisibilityHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	serviceType := r.PathValue("type")
+
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	visible := r.FormValue("visible") == "true"
+	catalog := service.Catalog()
+
+	visStore := service.NewPlanVisibilityStore(client)
+	if err := visStore.SetServiceVisibility(ctx, serviceType, visible, catalog); err != nil {
+		http.Error(w, "Failed to update visibility: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Full page reload to reflect all toggle changes
+	w.Header().Set("HX-Redirect", "/catalog")
+	w.WriteHeader(http.StatusOK)
 }

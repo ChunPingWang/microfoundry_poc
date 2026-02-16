@@ -64,8 +64,14 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("DELETE /secrets/{name}", s.DeleteSecretHandler)
 	s.mux.HandleFunc("GET /users", s.UsersHandler)
 
-	// Topology routes
-	s.mux.HandleFunc("GET /topologies", s.TopologiesListHandler)
+	// Catalog visibility routes
+	s.mux.HandleFunc("POST /catalog/{type}/{plan}/visibility", s.TogglePlanVisibilityHandler)
+	s.mux.HandleFunc("POST /catalog/{type}/visibility", s.ToggleServiceVisibilityHandler)
+
+	// Topology routes (accessed from catalog page)
+	s.mux.HandleFunc("GET /topologies", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/catalog", http.StatusMovedPermanently)
+	})
 	s.mux.HandleFunc("GET /topologies/upload", s.TopologyUploadHandler)
 	s.mux.HandleFunc("GET /topologies/{type}/{plan}", s.TopologyDetailHandler)
 	s.mux.HandleFunc("POST /topologies/{type}/{plan}", s.SaveTopologyHandler)
@@ -95,6 +101,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/services", s.APIServicesListHandler)
 	s.mux.HandleFunc("GET /api/services/{name}", s.APIServiceDetailHandler)
 	s.mux.HandleFunc("GET /api/catalog", s.APICatalogHandler)
+	s.mux.HandleFunc("GET /api/catalog/visible", s.APIVisibleCatalogHandler)
 	s.mux.HandleFunc("GET /api/secrets", s.APISecretsListHandler)
 	s.mux.HandleFunc("GET /api/secrets/{name}", s.APISecretDetailHandler)
 	s.mux.HandleFunc("POST /api/secrets", s.APICreateSecretHandler)

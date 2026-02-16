@@ -153,7 +153,6 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"catalog.html",
 		"secret_detail.html",
 		"secret_create.html",
-		"topologies.html",
 		"topology_detail.html",
 		"topology_upload.html",
 	}

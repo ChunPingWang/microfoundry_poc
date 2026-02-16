@@ -3,18 +3,43 @@
 {{end}}
 
 {{define "content"}}
-<div class="mb-6">
-    <h2 class="text-lg font-semibold text-gray-900">Service Catalog</h2>
-    <p class="text-sm text-gray-500">Browse available backing services and provision new instances</p>
+<div class="flex justify-between items-center mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-gray-900">Service Catalog</h2>
+        <p class="text-sm text-gray-500">Manage service plans, provisioning topology, and user visibility</p>
+    </div>
+    <div class="flex items-center space-x-3">
+        {{with .Content}}
+        {{if .TerraformAvailable}}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+            Terraform Available
+        </span>
+        {{else}}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+            Terraform Not Installed
+        </span>
+        {{end}}
+        {{end}}
+        <a href="/topologies/upload" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            Upload Topology
+        </a>
+    </div>
 </div>
 
 {{with .Content}}
+{{$items := .Items}}
 
-{{/* Group services by category */}}
-{{$catalog := .Catalog}}
+{{/* Category grouping helper — we iterate items and group by category */}}
 
-{{/* Database Category */}}
-{{range $catalog}}{{if eq .Category "database"}}{{if eq .ID "mariadb"}}
+{{/* ═══ DATABASES ═══ */}}
+{{$hasDB := false}}
+{{range $items}}{{if eq .ServiceType.Category "database"}}{{$hasDB = true}}{{end}}{{end}}
+{{if $hasDB}}
 <div class="mb-8">
     <div class="flex items-center space-x-2 mb-4">
         <div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -24,81 +49,17 @@
         </div>
         <h3 class="text-md font-semibold text-gray-900 uppercase tracking-wide">Databases</h3>
     </div>
-{{end}}{{end}}{{end}}
 
-{{range $catalog}}{{if eq .Category "database"}}
-<div class="bg-white rounded-lg shadow mb-4">
-    <div class="px-6 py-4 border-b border-gray-200">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div>
-                    <h3 class="text-lg font-semibold text-gray-900">{{.Name}}</h3>
-                    <p class="text-sm text-gray-500">{{.Description}}</p>
-                </div>
-            </div>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{{.Category}}</span>
-        </div>
-        {{if .Tags}}
-        <div class="mt-2 flex flex-wrap gap-1">
-            {{range .Tags}}
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">{{.}}</span>
-            {{end}}
-        </div>
-        {{end}}
-    </div>
-    <div class="p-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {{$svcID := .ID}}
-            {{range .Plans}}
-            <div class="border border-gray-200 rounded-lg p-5 hover:border-blue-300 hover:shadow-sm transition-all">
-                <div class="mb-3">
-                    <h4 class="text-sm font-semibold text-gray-900">{{.Name}}</h4>
-                    <p class="text-xs text-gray-500 mt-1">{{.Description}}</p>
-                </div>
-                <dl class="space-y-2 text-sm mb-4">
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">Memory</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.MemoryMB}}Mi</dd>
-                    </div>
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">CPU</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.CPUMillis}}m</dd>
-                    </div>
-                    {{if .Resources.StorageGB}}
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">Storage</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.StorageGB}}Gi</dd>
-                    </div>
-                    {{end}}
-                </dl>
-                <div class="flex justify-between items-center pt-3 border-t border-gray-100">
-                    <span class="text-sm font-semibold text-gray-900">{{.CostEstimate}}</span>
-                </div>
-                <div class="mt-4">
-                    <form hx-post="/services/create" hx-swap="none" class="space-y-2">
-                        <input type="hidden" name="service_type" value="{{$svcID}}">
-                        <input type="hidden" name="plan" value="{{.ID}}">
-                        <input type="text" name="name" placeholder="Instance name (e.g., my-db)"
-                               required pattern="[a-z0-9][a-z0-9-]*"
-                               class="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
-                        <button type="submit" class="w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium">
-                            Create Instance
-                        </button>
-                    </form>
-                </div>
-            </div>
-            {{end}}
-        </div>
-    </div>
+    {{range $items}}{{if eq .ServiceType.Category "database"}}
+    {{template "catalog_service_block" .}}
+    {{end}}{{end}}
 </div>
-{{end}}{{end}}
+{{end}}
 
-{{range $catalog}}{{if eq .Category "database"}}{{if eq .ID "mariadb"}}
-</div>
-{{end}}{{end}}{{end}}
-
-{{/* Cache Category */}}
-{{range $catalog}}{{if eq .Category "cache"}}{{if eq .ID "redis"}}
+{{/* ═══ CACHES ═══ */}}
+{{$hasCache := false}}
+{{range $items}}{{if eq .ServiceType.Category "cache"}}{{$hasCache = true}}{{end}}{{end}}
+{{if $hasCache}}
 <div class="mb-8">
     <div class="flex items-center space-x-2 mb-4">
         <div class="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
@@ -108,71 +69,17 @@
         </div>
         <h3 class="text-md font-semibold text-gray-900 uppercase tracking-wide">Caches</h3>
     </div>
-{{end}}{{end}}{{end}}
 
-{{range $catalog}}{{if eq .Category "cache"}}
-<div class="bg-white rounded-lg shadow mb-4">
-    <div class="px-6 py-4 border-b border-gray-200">
-        <div class="flex items-center justify-between">
-            <div>
-                <h3 class="text-lg font-semibold text-gray-900">{{.Name}}</h3>
-                <p class="text-sm text-gray-500">{{.Description}}</p>
-            </div>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">{{.Category}}</span>
-        </div>
-        {{if .Tags}}
-        <div class="mt-2 flex flex-wrap gap-1">
-            {{range .Tags}}<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">{{.}}</span>{{end}}
-        </div>
-        {{end}}
-    </div>
-    <div class="p-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {{$svcID := .ID}}
-            {{range .Plans}}
-            <div class="border border-gray-200 rounded-lg p-5 hover:border-red-300 hover:shadow-sm transition-all">
-                <div class="mb-3">
-                    <h4 class="text-sm font-semibold text-gray-900">{{.Name}}</h4>
-                    <p class="text-xs text-gray-500 mt-1">{{.Description}}</p>
-                </div>
-                <dl class="space-y-2 text-sm mb-4">
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">Memory</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.MemoryMB}}Mi</dd>
-                    </div>
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">CPU</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.CPUMillis}}m</dd>
-                    </div>
-                </dl>
-                <div class="flex justify-between items-center pt-3 border-t border-gray-100">
-                    <span class="text-sm font-semibold text-gray-900">{{.CostEstimate}}</span>
-                </div>
-                <div class="mt-4">
-                    <form hx-post="/services/create" hx-swap="none" class="space-y-2">
-                        <input type="hidden" name="service_type" value="{{$svcID}}">
-                        <input type="hidden" name="plan" value="{{.ID}}">
-                        <input type="text" name="name" placeholder="Instance name (e.g., my-cache)"
-                               required pattern="[a-z0-9][a-z0-9-]*"
-                               class="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
-                        <button type="submit" class="w-full px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium">
-                            Create Instance
-                        </button>
-                    </form>
-                </div>
-            </div>
-            {{end}}
-        </div>
-    </div>
+    {{range $items}}{{if eq .ServiceType.Category "cache"}}
+    {{template "catalog_service_block" .}}
+    {{end}}{{end}}
 </div>
-{{end}}{{end}}
+{{end}}
 
-{{range $catalog}}{{if eq .Category "cache"}}{{if eq .ID "redis"}}
-</div>
-{{end}}{{end}}{{end}}
-
-{{/* Messaging Category */}}
-{{range $catalog}}{{if eq .Category "messaging"}}{{if eq .ID "rabbitmq"}}
+{{/* ═══ MESSAGING ═══ */}}
+{{$hasMQ := false}}
+{{range $items}}{{if eq .ServiceType.Category "messaging"}}{{$hasMQ = true}}{{end}}{{end}}
+{{if $hasMQ}}
 <div class="mb-8">
     <div class="flex items-center space-x-2 mb-4">
         <div class="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
@@ -182,71 +89,17 @@
         </div>
         <h3 class="text-md font-semibold text-gray-900 uppercase tracking-wide">Messaging</h3>
     </div>
-{{end}}{{end}}{{end}}
 
-{{range $catalog}}{{if eq .Category "messaging"}}
-<div class="bg-white rounded-lg shadow mb-4">
-    <div class="px-6 py-4 border-b border-gray-200">
-        <div class="flex items-center justify-between">
-            <div>
-                <h3 class="text-lg font-semibold text-gray-900">{{.Name}}</h3>
-                <p class="text-sm text-gray-500">{{.Description}}</p>
-            </div>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">{{.Category}}</span>
-        </div>
-        {{if .Tags}}
-        <div class="mt-2 flex flex-wrap gap-1">
-            {{range .Tags}}<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">{{.}}</span>{{end}}
-        </div>
-        {{end}}
-    </div>
-    <div class="p-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {{$svcID := .ID}}
-            {{range .Plans}}
-            <div class="border border-gray-200 rounded-lg p-5 hover:border-orange-300 hover:shadow-sm transition-all">
-                <div class="mb-3">
-                    <h4 class="text-sm font-semibold text-gray-900">{{.Name}}</h4>
-                    <p class="text-xs text-gray-500 mt-1">{{.Description}}</p>
-                </div>
-                <dl class="space-y-2 text-sm mb-4">
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">Memory</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.MemoryMB}}Mi</dd>
-                    </div>
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">CPU</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.CPUMillis}}m</dd>
-                    </div>
-                </dl>
-                <div class="flex justify-between items-center pt-3 border-t border-gray-100">
-                    <span class="text-sm font-semibold text-gray-900">{{.CostEstimate}}</span>
-                </div>
-                <div class="mt-4">
-                    <form hx-post="/services/create" hx-swap="none" class="space-y-2">
-                        <input type="hidden" name="service_type" value="{{$svcID}}">
-                        <input type="hidden" name="plan" value="{{.ID}}">
-                        <input type="text" name="name" placeholder="Instance name (e.g., my-queue)"
-                               required pattern="[a-z0-9][a-z0-9-]*"
-                               class="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
-                        <button type="submit" class="w-full px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-sm font-medium">
-                            Create Instance
-                        </button>
-                    </form>
-                </div>
-            </div>
-            {{end}}
-        </div>
-    </div>
+    {{range $items}}{{if eq .ServiceType.Category "messaging"}}
+    {{template "catalog_service_block" .}}
+    {{end}}{{end}}
 </div>
-{{end}}{{end}}
+{{end}}
 
-{{range $catalog}}{{if eq .Category "messaging"}}{{if eq .ID "rabbitmq"}}
-</div>
-{{end}}{{end}}{{end}}
-
-{{/* Storage Category */}}
-{{range $catalog}}{{if eq .Category "storage"}}{{if eq .ID "minio"}}
+{{/* ═══ STORAGE ═══ */}}
+{{$hasStore := false}}
+{{range $items}}{{if eq .ServiceType.Category "storage"}}{{$hasStore = true}}{{end}}{{end}}
+{{if $hasStore}}
 <div class="mb-8">
     <div class="flex items-center space-x-2 mb-4">
         <div class="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
@@ -256,77 +109,17 @@
         </div>
         <h3 class="text-md font-semibold text-gray-900 uppercase tracking-wide">Storage</h3>
     </div>
-{{end}}{{end}}{{end}}
 
-{{range $catalog}}{{if eq .Category "storage"}}
-<div class="bg-white rounded-lg shadow mb-4">
-    <div class="px-6 py-4 border-b border-gray-200">
-        <div class="flex items-center justify-between">
-            <div>
-                <h3 class="text-lg font-semibold text-gray-900">{{.Name}}</h3>
-                <p class="text-sm text-gray-500">{{.Description}}</p>
-            </div>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{{.Category}}</span>
-        </div>
-        {{if .Tags}}
-        <div class="mt-2 flex flex-wrap gap-1">
-            {{range .Tags}}<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">{{.}}</span>{{end}}
-        </div>
-        {{end}}
-    </div>
-    <div class="p-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {{$svcID := .ID}}
-            {{range .Plans}}
-            <div class="border border-gray-200 rounded-lg p-5 hover:border-green-300 hover:shadow-sm transition-all">
-                <div class="mb-3">
-                    <h4 class="text-sm font-semibold text-gray-900">{{.Name}}</h4>
-                    <p class="text-xs text-gray-500 mt-1">{{.Description}}</p>
-                </div>
-                <dl class="space-y-2 text-sm mb-4">
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">Memory</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.MemoryMB}}Mi</dd>
-                    </div>
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">CPU</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.CPUMillis}}m</dd>
-                    </div>
-                    {{if .Resources.StorageGB}}
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">Storage</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.StorageGB}}Gi</dd>
-                    </div>
-                    {{end}}
-                </dl>
-                <div class="flex justify-between items-center pt-3 border-t border-gray-100">
-                    <span class="text-sm font-semibold text-gray-900">{{.CostEstimate}}</span>
-                </div>
-                <div class="mt-4">
-                    <form hx-post="/services/create" hx-swap="none" class="space-y-2">
-                        <input type="hidden" name="service_type" value="{{$svcID}}">
-                        <input type="hidden" name="plan" value="{{.ID}}">
-                        <input type="text" name="name" placeholder="Instance name (e.g., my-store)"
-                               required pattern="[a-z0-9][a-z0-9-]*"
-                               class="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
-                        <button type="submit" class="w-full px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium">
-                            Create Instance
-                        </button>
-                    </form>
-                </div>
-            </div>
-            {{end}}
-        </div>
-    </div>
+    {{range $items}}{{if eq .ServiceType.Category "storage"}}
+    {{template "catalog_service_block" .}}
+    {{end}}{{end}}
 </div>
-{{end}}{{end}}
+{{end}}
 
-{{range $catalog}}{{if eq .Category "storage"}}{{if eq .ID "minio"}}
-</div>
-{{end}}{{end}}{{end}}
-
-{{/* Gateway Category */}}
-{{range $catalog}}{{if eq .Category "gateway"}}{{if eq .ID "kong"}}
+{{/* ═══ API GATEWAYS ═══ */}}
+{{$hasGW := false}}
+{{range $items}}{{if eq .ServiceType.Category "gateway"}}{{$hasGW = true}}{{end}}{{end}}
+{{if $hasGW}}
 <div class="mb-8">
     <div class="flex items-center space-x-2 mb-4">
         <div class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
@@ -336,68 +129,118 @@
         </div>
         <h3 class="text-md font-semibold text-gray-900 uppercase tracking-wide">API Gateways</h3>
     </div>
-{{end}}{{end}}{{end}}
 
-{{range $catalog}}{{if eq .Category "gateway"}}
+    {{range $items}}{{if eq .ServiceType.Category "gateway"}}
+    {{template "catalog_service_block" .}}
+    {{end}}{{end}}
+</div>
+{{end}}
+
+{{end}}
+{{end}}
+
+{{/* ═══════════════════════════════════════════════════════
+     Reusable service block — renders one service type with
+     its plans table, topology links, and visibility toggles
+     ═══════════════════════════════════════════════════════ */}}
+{{define "catalog_service_block"}}
 <div class="bg-white rounded-lg shadow mb-4">
     <div class="px-6 py-4 border-b border-gray-200">
         <div class="flex items-center justify-between">
             <div>
-                <h3 class="text-lg font-semibold text-gray-900">{{.Name}}</h3>
-                <p class="text-sm text-gray-500">{{.Description}}</p>
+                <h3 class="text-lg font-semibold text-gray-900">{{.ServiceType.Name}}</h3>
+                <p class="text-sm text-gray-500">{{.ServiceType.Description}}</p>
             </div>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">{{.Category}}</span>
-        </div>
-        {{if .Tags}}
-        <div class="mt-2 flex flex-wrap gap-1">
-            {{range .Tags}}<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">{{.}}</span>{{end}}
-        </div>
-        {{end}}
-    </div>
-    <div class="p-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {{$svcID := .ID}}
-            {{range .Plans}}
-            <div class="border border-gray-200 rounded-lg p-5 hover:border-purple-300 hover:shadow-sm transition-all">
-                <div class="mb-3">
-                    <h4 class="text-sm font-semibold text-gray-900">{{.Name}}</h4>
-                    <p class="text-xs text-gray-500 mt-1">{{.Description}}</p>
+            <div class="flex items-center space-x-3">
+                {{if .ServiceType.Tags}}
+                <div class="flex flex-wrap gap-1">
+                    {{range .ServiceType.Tags}}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">{{.}}</span>
+                    {{end}}
                 </div>
-                <dl class="space-y-2 text-sm mb-4">
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">Memory</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.MemoryMB}}Mi</dd>
-                    </div>
-                    <div class="flex justify-between">
-                        <dt class="text-gray-500">CPU</dt>
-                        <dd class="font-mono text-gray-900 text-xs">{{.Resources.CPUMillis}}m</dd>
-                    </div>
-                </dl>
-                <div class="flex justify-between items-center pt-3 border-t border-gray-100">
-                    <span class="text-sm font-semibold text-gray-900">{{.CostEstimate}}</span>
-                </div>
-                <div class="mt-4">
-                    <form hx-post="/services/create" hx-swap="none" class="space-y-2">
-                        <input type="hidden" name="service_type" value="{{$svcID}}">
-                        <input type="hidden" name="plan" value="{{.ID}}">
-                        <input type="text" name="name" placeholder="Instance name (e.g., my-gw)"
-                               required pattern="[a-z0-9][a-z0-9-]*"
-                               class="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
-                        <button type="submit" class="w-full px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium">
-                            Create Instance
-                        </button>
-                    </form>
+                {{end}}
+                <div class="flex items-center space-x-1 ml-4">
+                    <span class="text-xs text-gray-400">{{.VisibleCount}}/{{len .Plans}} visible</span>
+                    <button hx-post="/catalog/{{.ServiceType.ID}}/visibility" hx-swap="none" hx-vals='{"visible":"true"}'
+                            class="px-2 py-1 text-xs text-green-700 bg-green-50 rounded hover:bg-green-100">Enable All</button>
+                    <button hx-post="/catalog/{{.ServiceType.ID}}/visibility" hx-swap="none" hx-vals='{"visible":"false"}'
+                            class="px-2 py-1 text-xs text-gray-600 bg-gray-50 rounded hover:bg-gray-100">Disable All</button>
                 </div>
             </div>
-            {{end}}
         </div>
     </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Memory</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">CPU</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Storage</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Provisioner</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Topology</th>
+                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">User Visible</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {{$svcID := .ServiceType.ID}}
+                {{range .Plans}}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">{{.Plan.Name}}</div>
+                        <div class="text-xs text-gray-500">{{.Plan.Description}}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-700">{{.Plan.Resources.MemoryMB}}Mi</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-700">{{.Plan.Resources.CPUMillis}}m</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-700">
+                        {{if .Plan.Resources.StorageGB}}{{.Plan.Resources.StorageGB}}Gi{{else}}<span class="text-gray-400">—</span>{{end}}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {{if .HasTopology}}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            {{.Provisioner}}
+                        </span>
+                        {{else}}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                            K8s Native
+                        </span>
+                        {{end}}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {{if .HasTopology}}
+                        <a href="/topologies/{{$svcID}}/{{.Plan.ID}}" class="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 font-medium">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                            </svg>
+                            Edit
+                            <span class="ml-1 text-xs text-gray-400">({{.FileCount}} files)</span>
+                        </a>
+                        {{else}}
+                        <a href="/topologies/{{$svcID}}/{{.Plan.ID}}" class="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                            </svg>
+                            Configure
+                        </a>
+                        {{end}}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center">
+                        {{if .IsVisible}}
+                        <button hx-post="/catalog/{{$svcID}}/{{.Plan.ID}}/visibility" hx-swap="outerHTML" hx-vals='{"visible":"false"}'
+                            class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            Visible</button>
+                        {{else}}
+                        <button hx-post="/catalog/{{$svcID}}/{{.Plan.ID}}/visibility" hx-swap="outerHTML" hx-vals='{"visible":"true"}'
+                            class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 cursor-pointer">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-14-14zM10 18a8 8 0 100-16 8 8 0 000 16z" clip-rule="evenodd"/></svg>
+                            Hidden</button>
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
 </div>
-{{end}}{{end}}
-
-{{range $catalog}}{{if eq .Category "gateway"}}{{if eq .ID "kong"}}
-</div>
-{{end}}{{end}}{{end}}
-
-{{end}}
 {{end}}
