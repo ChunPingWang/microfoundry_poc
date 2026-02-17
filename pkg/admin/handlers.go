@@ -211,6 +211,7 @@ func (s *Server) AppTabHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+
 	// Metrics tab needs Grafana panel URLs
 	if tab == "metrics" {
 		appParams := map[string]string{"var-app": name}
