@@ -174,6 +174,7 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"settings_registry.html",
 		"settings_webhooks.html",
 		"settings_smtp.html",
+		"login.html",
 	}
 
 	pages := make(map[string]*template.Template, len(pageFiles)+3)

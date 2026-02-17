@@ -16,6 +16,7 @@ type Config struct {
 	Monitoring MonitoringConfig `mapstructure:"monitoring"`
 	Registry   RegistryConfig   `mapstructure:"registry"`
 	SMTP       SMTPConfig       `mapstructure:"smtp"`
+	Auth       AuthConfig       `mapstructure:"auth"`
 }
 
 // RegistryConfig provides file-based defaults for container registry settings.
@@ -34,6 +35,16 @@ type SMTPConfig struct {
 	Username string `mapstructure:"username"`
 	FromAddr string `mapstructure:"from_addr"`
 	TLS      bool   `mapstructure:"tls"`
+}
+
+// AuthConfig holds OIDC/Keycloak authentication settings.
+type AuthConfig struct {
+	Enabled      bool   `mapstructure:"enabled"`
+	IssuerURL    string `mapstructure:"issuer_url"`
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURL  string `mapstructure:"redirect_url"`
+	SessionKey   string `mapstructure:"session_key"`
 }
 
 // MonitoringConfig holds endpoints for the monitoring stack.

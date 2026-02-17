@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/younjinjeong/microfoundry/pkg/auth"
 	"github.com/younjinjeong/microfoundry/pkg/monitoring"
 )
 
@@ -15,6 +16,8 @@ type PageData struct {
 	Active        string
 	ActiveCluster string
 	Content       any
+	User          *auth.UserSession // nil when auth is disabled or not logged in
+	AuthEnabled   bool
 }
 
 func (s *Server) pageData(title, active string) PageData {
@@ -23,7 +26,14 @@ func (s *Server) pageData(title, active string) PageData {
 		Version:       s.version,
 		Active:        active,
 		ActiveCluster: s.clientManager.GetActive(),
+		AuthEnabled:   s.authEnabled(),
 	}
+}
+
+func (s *Server) pageDataWithUser(r *http.Request, title, active string) PageData {
+	pd := s.pageData(title, active)
+	pd.User = auth.UserFromContext(r.Context())
+	return pd
 }
 
 func (s *Server) DashboardHandler(w http.ResponseWriter, r *http.Request) {
@@ -332,7 +342,4 @@ func (s *Server) ConfigHandler(w http.ResponseWriter, r *http.Request) {
 	s.templates.Render(w, "config.html", data)
 }
 
-func (s *Server) UsersHandler(w http.ResponseWriter, r *http.Request) {
-	data := s.pageData("Users & Organizations", "users")
-	s.templates.Render(w, "users.html", data)
-}
+// UsersHandler is now replaced by OrgsPageHandler in org_handlers.go

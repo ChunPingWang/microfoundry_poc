@@ -51,3 +51,13 @@ monitoring:
 #   username: "user@example.com"
 #   from_addr: "noreply@microfoundry.local"
 #   tls: true
+
+# Authentication (Keycloak OIDC)
+# Run `mf setup keycloak` to deploy Keycloak, then enable auth here.
+# auth:
+#   enabled: true
+#   issuer_url: "http://localhost:8180/realms/microfoundry"
+#   client_id: "mf-admin"
+#   client_secret: "your-client-secret"
+#   redirect_url: "http://localhost:8080/auth/callback"
+#   session_key: ""  # 64-char hex string; auto-generated if empty
