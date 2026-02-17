@@ -62,6 +62,18 @@ Before planning any new Epic, the Analyzer agent MUST:
 - When the `rc` branch does not exist yet, ask the user to create it first.
 - PR base branch must always be `rc` (use `gh pr create --base rc`).
 
+### Document Expert Agent — Periodic Docs Sync (EVERY 5 EPICS)
+
+After every 5 merged Epics (counted from the last `docs: sync documentation` commit), trigger the Document Expert:
+
+1. **Audit** — Collect all merged PRs since last sync, identify new features/commands/endpoints/config changes.
+2. **Classify** — Categorize impact: Critical (new feature), High (new API), Medium (bugfix), Low (refactor), None (skip).
+3. **Draft** — Update `README.md` (Development History, capabilities, structure) and `docs/` files (user-manual, admin-guide, architecture).
+4. **Self-review** — Validate all links, examples, screenshots, and config references.
+5. **PR** — Create `docs/sync-N` branch, commit, and open PR targeting `rc`.
+
+Full spec: `.github/agents/doc-expert.md`
+
 ---
 
 ## Project Conventions

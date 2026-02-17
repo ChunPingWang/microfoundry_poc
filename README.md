@@ -524,9 +524,11 @@ MicroFoundry is developed through a structured **Human-AI pair programming workf
 7. **Agent Review** — All 7 agents post review comments on the PR with findings and recommendations
 8. **Merge** — Human reviews and merges to `rc`
 
-### The 7 Agent Personas
+### The 7+1 Agent Personas
 
-Every issue and PR receives comments from 7 specialized agent personas, each bringing domain expertise:
+Every issue and PR receives comments from **7 specialized review agents**. Additionally, a **Document Expert** agent runs periodically to keep docs in sync.
+
+#### Per-Epic Review Agents (every Epic)
 
 | Agent | Role | Focus Area |
 |-------|------|------------|
@@ -537,6 +539,14 @@ Every issue and PR receives comments from 7 specialized agent personas, each bri
 | **DevOps Engineer** | Evaluates deployment safety, observability, CI/CD | Rolling updates, log formats, monitoring integration, build pipeline |
 | **QA Engineer** | Designs test plans, verification matrices, regression checks | Unit/integration/manual test cases, edge cases, acceptance criteria |
 | **Product Manager** | Assesses scope, user impact, prioritization | User stories, release blocking decisions, success metrics, communication |
+
+#### Periodic Batch Agent (every 5 Epics)
+
+| Agent               | Role                                         | Focus Area                                                             |
+|---------------------|----------------------------------------------|------------------------------------------------------------------------|
+| **Document Expert** | Syncs README and docs/ with codebase reality | CLI commands, API endpoints, config changes, admin pages, architecture |
+
+The Document Expert activates after every 5th merged Epic. It audits all changes since the last sync, classifies their documentation impact (Critical → None), updates README.md and all 5 docs files, then creates a docs-only PR. This ensures documentation never drifts more than 5 Epics behind the actual codebase. Full workflow spec: [`.github/agents/doc-expert.md`](.github/agents/doc-expert.md).
 
 ### Branch Strategy: Release-Candidate Flow
 
@@ -608,6 +618,7 @@ MicroFoundry has been built incrementally through a series of Epics, each adding
 | [#26](https://github.com/younjinjeong/microfoundry/pull/26) | Keycloak UAA | OIDC authentication with Keycloak, sessions, org management | — |
 | [#31](https://github.com/younjinjeong/microfoundry/pull/31) | E2E Testing | Playwright E2E test suite (82 test cases, 8 suites) | — |
 | [#34](https://github.com/younjinjeong/microfoundry/pull/34) | IAM & SCIM | Keycloak user CRUD, SCIM v2, OPA authorization, audit log | 22 |
+| [#37](https://github.com/younjinjeong/microfoundry/pull/37) | IAM Hardening | Authz bypass fix, error handling, SCIM compliance, OPA atomicity | 7 |
 
 ### External Contributions
 
