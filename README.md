@@ -23,97 +23,42 @@ MicroFoundry replaces the heavyweight BOSH/Diego runtime with Kubernetes, manage
 
 ## Admin Dashboard
 
-The built-in admin dashboard (`mf admin`, default `:8080`) provides a complete platform management experience.
+The built-in admin dashboard (`mf admin`, default `:8080`) provides a complete platform management experience — application lifecycle, service catalog, multi-cluster management, observability, secrets, IAM, and platform settings in a single interface.
 
-### Dashboard Overview
-
-The main dashboard shows platform stats, deployed application count, active domain, namespace, and Kubernetes context at a glance.
-
-<!-- Screenshot: Dashboard with 4 stat cards (Applications, Domain, Namespace, K8s Context) and quick links -->
 <p align="center">
-  <img src="docs/images/dashboard.png" alt="MicroFoundry Dashboard" width="900">
+  <img src="docs/images/dashboard-walkthrough.gif" alt="MicroFoundry Admin Dashboard Walkthrough" width="900">
 </p>
 
-### Applications
+<details>
+<summary><strong>Screenshots</strong> (click to expand)</summary>
+<br>
 
-List all deployed applications with state, instance count, memory, build type, and routes. Real-time auto-refresh every 10 seconds.
+| Dashboard | Applications | Service Catalog |
+|:---------:|:------------:|:---------------:|
+| <img src="docs/images/dashboard.png" alt="Dashboard" width="280"> | <img src="docs/images/apps-list.png" alt="Applications" width="280"> | <img src="docs/images/catalog.png" alt="Catalog" width="280"> |
+| Platform stats, quick links | App state, instances, routes | 10 service types, 3 plans each |
 
-<!-- Screenshot: Applications list showing deployed apps with status badges, instance counts, and action buttons -->
-<p align="center">
-  <img src="docs/images/apps-list.png" alt="Applications List" width="900">
-</p>
+| Clusters | Monitoring & Alerts | Secrets |
+|:--------:|:-------------------:|:-------:|
+| <img src="docs/images/clusters.png" alt="Clusters" width="280"> | <img src="docs/images/monitoring.png" alt="Monitoring" width="280"> | <img src="docs/images/secrets.png" alt="Secrets" width="280"> |
+| Multi-cluster management | Prometheus alerts, Grafana | Service & user-defined secrets |
 
-### Application Detail — 8-Tab View
+| Users & IAM | Platform Settings | Services |
+|:-----------:|:-----------------:|:--------:|
+| <img src="docs/images/users-iam.png" alt="Users & IAM" width="280"> | <img src="docs/images/settings.png" alt="Settings" width="280"> | <img src="docs/images/services.png" alt="Services" width="280"> |
+| Keycloak OIDC, OPA, SCIM v2 | Registry, Webhooks, SMTP | Provisioned backing services |
 
-Each application has a detailed view with 8 tabs: Overview, Instances, Config, Services, Routes, Logs, Metrics, and Performance.
+</details>
 
-<!-- Screenshot: App detail page showing the tabbed interface with Overview tab active -->
-<p align="center">
-  <img src="docs/images/app-detail.png" alt="Application Detail" width="900">
-</p>
-
-### Performance & Observability
-
-Netflix Atlas-inspired auto-instrumentation using Grafana Beyla (eBPF). Applications get full RED metrics (Rate, Errors, Duration) without any code changes — like Netflix Spectator auto-injects into JVM apps, but using eBPF for any language.
-
-<!-- Screenshot: Performance tab showing RED metric stat cards, Grafana panels, and correlated logs -->
-<p align="center">
-  <img src="docs/images/app-performance.png" alt="App Performance Tab" width="900">
-</p>
-
-### Service Catalog
-
-Browse services by category (Databases, Caches, Messaging, Storage, API Gateways). Each service type offers 3 plans (small/medium/large) with configurable Terraform topologies and plan visibility controls.
-
-<!-- Screenshot: Service Catalog showing category-grouped services with plan tables and visibility toggles -->
-<p align="center">
-  <img src="docs/images/catalog.png" alt="Service Catalog" width="900">
-</p>
-
-### Multi-Cluster Management
-
-Register and manage multiple Kubernetes clusters (Docker Desktop, EKS, GKE, AKS). Switch active clusters, monitor health, and deploy across environments.
-
-<!-- Screenshot: Clusters page showing registered clusters with provider badges, status, and set-active controls -->
-<p align="center">
-  <img src="docs/images/clusters.png" alt="Multi-Cluster Management" width="900">
-</p>
-
-### Monitoring & Alerts
-
-Integrated Prometheus alerting with embedded Grafana dashboards. Pre-configured alerts: `MFAppHighErrorRate`, `MFAppHighLatency`, `MFAppNoTraffic`, `MFBeylaDown`.
-
-<!-- Screenshot: Monitoring page showing active alerts section and embedded Grafana dashboards -->
-<p align="center">
-  <img src="docs/images/monitoring.png" alt="Monitoring & Alerts" width="900">
-</p>
-
-### Secrets Management
-
-View and manage service secrets (auto-created on service provisioning) and user-defined secrets. Reveal individual secret values with a click.
-
-<!-- Screenshot: Secrets list with type badges (Service/User-defined), key counts, and reveal toggles -->
-<p align="center">
-  <img src="docs/images/secrets.png" alt="Secrets Management" width="900">
-</p>
-
-### Users, Organizations & IAM
-
-Keycloak-integrated identity and access management with 4 tabs: Organizations, Users, Policies (OPA Rego), and Audit Log.
-
-<!-- Screenshot: Users & Organizations page showing the tabbed IAM interface -->
-<p align="center">
-  <img src="docs/images/users-iam.png" alt="Users & IAM" width="900">
-</p>
-
-### Platform Settings
-
-Configure container registry (Harbor/Docker Hub), webhooks (event notifications), and SMTP (email) — all stored in Kubernetes ConfigMaps and Secrets.
-
-<!-- Screenshot: Settings page showing Registry configuration form -->
-<p align="center">
-  <img src="docs/images/settings.png" alt="Platform Settings" width="900">
-</p>
+**Key pages:**
+- **Dashboard** — Platform stats (apps, domain, namespace, K8s context) with quick links
+- **Applications** — Deploy, scale, delete apps with 8-tab detail view (Overview, Instances, Config, Services, Routes, Logs, Metrics, Performance)
+- **Service Catalog** — Browse 10 service types by category with plan visibility and Terraform topology editor
+- **Clusters** — Register and switch between Docker Desktop, EKS, GKE, AKS clusters
+- **Monitoring** — Prometheus alerts + embedded Grafana dashboards with Beyla eBPF auto-instrumentation
+- **Secrets** — Service secrets (auto-created) and user-defined key-value pairs with reveal toggle
+- **Users & IAM** — Keycloak user management, organizations, OPA Rego policies, audit log
+- **Settings** — Container registry, webhooks, SMTP configuration stored in K8s
 
 ---
 
