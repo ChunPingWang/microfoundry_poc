@@ -1,0 +1,655 @@
+# MicroFoundry User Manual
+
+A complete guide to deploying and managing applications on MicroFoundry — a micro CloudFoundry for Kubernetes.
+
+---
+
+## Table of Contents
+
+1. [Getting Started](#getting-started)
+2. [Configuration](#configuration)
+3. [Application Lifecycle](#application-lifecycle)
+4. [Backing Services](#backing-services)
+5. [Secret Management](#secret-management)
+6. [Monitoring & Observability](#monitoring--observability)
+7. [Authentication & Organizations](#authentication--organizations)
+8. [Multi-Cluster Management](#multi-cluster-management)
+9. [Container Registry](#container-registry)
+10. [CLI Reference](#cli-reference)
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Go 1.25+** — for building the CLI
+- **Docker Desktop** with Kubernetes enabled (for local development)
+- **kubectl** — Kubernetes CLI
+- **Helm 3** — for monitoring stack installation
+- **Nginx Ingress Controller** — for routing (or Kong/CSP-native gateway)
+
+### Install
+
+```bash
+# Clone the repository
+git clone https://github.com/younjinjeong/microfoundry.git
+cd microfoundry
+
+# Build the CLI
+make build              # Output: bin/mf
+
+# Or install to GOPATH/bin
+make install
+```
+
+### Verify Installation
+
+```bash
+mf version
+# MicroFoundry dev
+```
+
+### Quick Start
+
+```bash
+# 1. Deploy your first app
+cd your-app-directory/
+mf push hello-world
+
+# 2. Check it's running
+mf apps
+
+# 3. View app details
+mf app hello-world
+
+# 4. Stream logs
+mf logs hello-world
+
+# 5. Open admin dashboard
+mf admin
+# → http://localhost:8080
+```
+
+---
+
+## Configuration
+
+MicroFoundry uses YAML configuration read by [Viper](https://github.com/spf13/viper). Config files are searched in order:
+
+1. `./configs/mf.yaml` — project-local config
+2. `~/.mf/mf.yaml` — user home config
+
+Environment variables override file values with the prefix `MF_` (e.g., `MF_GITHUB_OWNER`).
+
+### Example Config
+
+Copy the example and edit:
+
+```bash
+cp configs/mf.example.yaml configs/mf.yaml
+# or for user-wide:
+cp configs/mf.example.yaml ~/.mf/mf.yaml
+```
+
+### Configuration Reference
+
+```yaml
+# GitHub integration (for source linking)
+github:
+  owner: "younjinjeong"
+  repo: "microfoundry"
+
+# Kubernetes clusters
+kubernetes:
+  active: "docker-desktop"       # Which cluster to use
+  clusters:
+    docker-desktop:
+      name: "docker-desktop"
+      context: "docker-desktop"  # kubectl context name
+      namespace: "microfoundry"  # K8s namespace for apps
+      domain: "cf-local.dev"     # App domain (subdomain routing)
+      provider: "docker-desktop" # Provider hint
+      enabled: true
+    # Add more clusters:
+    # eks-prod:
+    #   context: "arn:aws:eks:us-east-1:..."
+    #   namespace: "microfoundry"
+    #   domain: "apps.example.com"
+    #   provider: "eks"
+    #   region: "us-east-1"
+
+# Monitoring stack endpoints
+monitoring:
+  grafana_url: "http://localhost:3000"
+  loki_url: "http://loki.monitoring.svc.cluster.local:3100"
+  alertmanager_url: "http://kube-prometheus-kube-prome-alertmanager.monitoring.svc.cluster.local:9093"
+  prometheus_url: "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090"
+  beyla_enabled: true
+
+# Container registry (optional — defaults to local build only)
+# registry:
+#   url: "harbor.local:30003"
+#   project: "microfoundry"
+#   username: "admin"
+#   insecure: false
+
+# SMTP (optional — for email notifications)
+# smtp:
+#   host: "smtp.gmail.com"
+#   port: 587
+#   username: "user@example.com"
+#   from_addr: "noreply@microfoundry.local"
+#   tls: true
+
+# Authentication (optional — Keycloak OIDC)
+# auth:
+#   enabled: true
+#   issuer_url: "http://localhost:8180/realms/microfoundry"
+#   client_id: "mf-admin"
+#   client_secret: "your-secret"
+#   redirect_url: "http://localhost:8080/auth/callback"
+#   session_key: ""  # Auto-generated if empty
+```
+
+---
+
+## Application Lifecycle
+
+### Deploying an Application
+
+MicroFoundry supports deploying from any directory containing a **Dockerfile** or source compatible with **Cloud Native Buildpacks** (Paketo/pack CLI).
+
+```bash
+# Deploy from current directory
+mf push my-app
+
+# Deploy with custom memory and instances
+mf push my-app -m 512M -i 3
+
+# Deploy from a specific path
+mf push my-app -p /path/to/source
+```
+
+**Build strategies** (auto-detected in order):
+1. **Dockerfile** — if `Dockerfile` exists in the source directory
+2. **Cloud Native Buildpacks** — if `pack` CLI is available
+
+**What happens during `mf push`:**
+
+```
+Phase 1:   Build image locally (Docker or CNB)
+Phase 1.5: Push to registry (if registry configured)
+Phase 2:   Deploy to Kubernetes (Deployment + Service)
+Phase 3:   Create Ingress route (<app-name>.<domain>)
+Phase 4:   Update /etc/hosts (local dev only)
+Phase 5:   Wait for rollout (up to 120 seconds)
+```
+
+### Using manifest.yml
+
+You can use a CloudFoundry-compatible `manifest.yml`:
+
+```yaml
+applications:
+  - name: hello-world
+    memory: 256M
+    instances: 2
+    buildpacks:
+      - paketo-buildpacks/go
+    routes:
+      - route: hello-world.cf-local.dev
+    env:
+      PORT: "8080"
+```
+
+### Listing Applications
+
+```bash
+# List all deployed applications
+mf apps
+```
+
+Output:
+```
+name            state     instances   memory
+hello-world     STARTED   3/3         256M
+api-gateway     STARTED   2/2         512M
+```
+
+### Viewing App Details
+
+```bash
+mf app hello-world
+```
+
+Shows: name, state, routes, instances (with pod names, restart counts, node assignments), image reference, memory, disk, CPU limits, and more.
+
+### Streaming Logs
+
+```bash
+# Stream live logs (like cf logs)
+mf logs hello-world
+
+# Fetch recent logs (last 100 lines)
+mf logs hello-world --recent
+```
+
+### Scaling
+
+```bash
+# Scale to 5 instances
+mf scale hello-world -i 5
+```
+
+### Deleting an App
+
+```bash
+mf delete hello-world
+```
+
+This removes the Deployment, Service, Ingress, and associated /etc/hosts entries.
+
+---
+
+## Backing Services
+
+MicroFoundry provides a built-in service catalog with 10 service types across 5 categories. All services are provisioned as Kubernetes resources (Deployments, Services, PVCs).
+
+### Service Catalog
+
+| Category | Services |
+|----------|----------|
+| **Database** | MariaDB, PostgreSQL, ClickHouse |
+| **Cache** | Redis, Memcached |
+| **Messaging** | RabbitMQ, ActiveMQ Artemis |
+| **Storage** | MinIO (S3-compatible) |
+| **Gateway** | Kong, Nginx |
+
+Each service offers 3 plans:
+- **Small (Dev)** — 256MB memory, 250m CPU
+- **Medium (Staging)** — 512MB memory, 500m CPU
+- **Large (Production)** — 1024MB memory, 1000m CPU
+
+### Browse the Catalog
+
+```bash
+mf catalog
+```
+
+### Provision a Service
+
+```bash
+# Create a PostgreSQL instance with the small plan
+mf create-service postgresql small my-db
+
+# Create a Redis cache
+mf create-service redis small my-cache
+
+# Create a message queue
+mf create-service rabbitmq medium my-queue
+```
+
+### List Provisioned Services
+
+```bash
+mf services
+```
+
+### View Service Details
+
+```bash
+mf service my-db
+```
+
+### Bind a Service to an App
+
+Binding injects credentials as `VCAP_SERVICES` environment variable — the same mechanism as CloudFoundry:
+
+```bash
+mf bind-service hello-world my-db
+```
+
+This creates a K8s Secret (`mf-svc-my-db`) and adds it to the app's deployment as an environment source. The app receives a `VCAP_SERVICES` JSON blob with connection details:
+
+```json
+{
+  "postgresql": [{
+    "name": "my-db",
+    "credentials": {
+      "host": "mf-svc-my-db.microfoundry.svc.cluster.local",
+      "port": "5432",
+      "username": "postgres",
+      "password": "auto-generated",
+      "database": "mydb"
+    }
+  }]
+}
+```
+
+### Unbind and Delete
+
+```bash
+# Unbind service from app
+mf unbind-service hello-world my-db
+
+# Delete the service instance
+mf delete-service my-db
+```
+
+---
+
+## Secret Management
+
+MicroFoundry manages two types of Kubernetes secrets:
+
+- **Service secrets** (`mf-svc-*`) — auto-created when provisioning backing services
+- **User secrets** (`mf-secret-*`) — developer-managed key-value pairs
+
+### List Secrets
+
+```bash
+mf secrets
+```
+
+### Create a User Secret
+
+```bash
+mf create-secret api-keys API_KEY=abc123 API_SECRET=xyz789
+```
+
+### View Secret Details
+
+```bash
+# Show secret metadata (values masked)
+mf secret api-keys
+
+# Reveal actual values
+mf secret api-keys --reveal
+```
+
+### Delete a Secret
+
+```bash
+mf delete-secret api-keys
+```
+
+---
+
+## Monitoring & Observability
+
+MicroFoundry provides Netflix Atlas-inspired auto-instrumentation using **Grafana Beyla** (eBPF). Applications get full RED metrics without any code changes.
+
+### Install the Monitoring Stack
+
+```bash
+make monitoring-install
+# Or directly:
+bash deploy/monitoring/install.sh
+```
+
+This installs:
+1. **kube-prometheus-stack** — Prometheus + Grafana + AlertManager
+2. **Grafana Beyla** — eBPF DaemonSet for zero-code HTTP metrics
+3. **Loki + Promtail** — Log aggregation
+4. **Grafana dashboards** — Pre-built dashboards
+5. **Prometheus recording rules** — Pre-computed RED metrics
+6. **Alert rules** — App health alerts
+
+### RED Metrics
+
+Every deployed application automatically gets these metrics via Beyla eBPF:
+
+| Metric | Recording Rule | Description |
+|--------|---------------|-------------|
+| **Rate** | `microfoundry:http_request_rate:5m` | Requests per second |
+| **Errors** | `microfoundry:http_error_rate:5m` | 5xx error ratio |
+| **Duration p50** | `microfoundry:http_latency_p50:5m` | Median latency |
+| **Duration p95** | `microfoundry:http_latency_p95:5m` | 95th percentile latency |
+| **Duration p99** | `microfoundry:http_latency_p99:5m` | 99th percentile latency |
+
+### Alert Rules
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| `MFAppHighErrorRate` | Error rate > 5% for 5 minutes | warning |
+| `MFAppHighLatency` | p95 latency > 1s for 5 minutes | warning |
+| `MFAppNoTraffic` | Zero requests for 15 minutes | info |
+| `MFBeylaDown` | Beyla DaemonSet not running | critical |
+
+### Accessing Dashboards
+
+```bash
+# Grafana (via ingress)
+open http://grafana.cf-local.dev
+# Default: admin / microfoundry
+
+# Prometheus (port-forward)
+kubectl port-forward -n monitoring svc/kube-prometheus-kube-prome-prometheus 9090:9090
+
+# AlertManager (port-forward)
+kubectl port-forward -n monitoring svc/kube-prometheus-kube-prome-alertmanager 9093:9093
+```
+
+---
+
+## Authentication & Organizations
+
+MicroFoundry supports OIDC authentication via **Keycloak** with social login (Google, GitHub, Amazon).
+
+### Deploy Keycloak
+
+```bash
+# Deploy Keycloak to the active cluster
+mf setup keycloak
+
+# Wait for it, then port-forward:
+kubectl port-forward -n microfoundry svc/keycloak 8180:8180
+
+# Configure the realm, client, and roles
+mf setup keycloak-realm --url http://localhost:8180
+
+# (Optional) Add Google social login
+mf setup keycloak-idp --provider google \
+  --client-id <GOOGLE_CLIENT_ID> \
+  --client-secret <GOOGLE_CLIENT_SECRET>
+```
+
+### Enable Authentication
+
+Add to your `mf.yaml`:
+
+```yaml
+auth:
+  enabled: true
+  issuer_url: "http://localhost:8180/realms/microfoundry"
+  client_id: "mf-admin"
+  client_secret: "<from mf setup keycloak-realm>"
+  redirect_url: "http://localhost:8080/auth/callback"
+```
+
+### Roles
+
+Keycloak is configured with these roles:
+- **platform-admin** — full platform access
+- **org-admin** — organization administrator
+- **org-member** — organization member
+- **viewer** — read-only access
+
+### Organizations
+
+When auth is enabled, users can create and manage organizations:
+
+- Each user gets a default personal organization
+- Invite members by email
+- Assign roles: admin, member, viewer
+- Switch active organization
+
+---
+
+## Multi-Cluster Management
+
+MicroFoundry supports deploying to multiple Kubernetes clusters.
+
+### Add a Cluster via Config
+
+```yaml
+kubernetes:
+  active: "docker-desktop"
+  clusters:
+    docker-desktop:
+      context: "docker-desktop"
+      namespace: "microfoundry"
+      domain: "cf-local.dev"
+      provider: "docker-desktop"
+      enabled: true
+    eks-prod:
+      context: "arn:aws:eks:us-west-2:123456789:cluster/my-cluster"
+      namespace: "microfoundry"
+      domain: "apps.example.com"
+      provider: "eks"
+      region: "us-west-2"
+      enabled: true
+```
+
+### Add a Cluster via Admin UI
+
+Navigate to **Settings > Clusters** in the admin dashboard to add, remove, and switch clusters.
+
+### Provider Auto-Detection
+
+The provider is auto-detected from the kubeconfig context name:
+- `docker-desktop` → Docker Desktop
+- Contains `eks` or `aws` → EKS
+- Contains `gke` → GKE
+- Contains `aks` or `azure` → AKS
+- Other → Native
+
+---
+
+## Container Registry
+
+By default, MicroFoundry builds images locally. You can configure a container registry (e.g., Harbor, Docker Hub) for remote image storage.
+
+### Configure via Admin UI
+
+Navigate to **Settings > Registry** and fill in:
+- **Registry URL** — e.g., `harbor.local:30003`
+- **Project** — e.g., `microfoundry`
+- **Username/Password** — registry credentials
+- **Skip TLS Verification** — for self-signed certs
+- **Enable Registry Push** — toggle on
+
+### How It Works
+
+When a registry is configured and `mf push` runs:
+
+1. Image is built locally with the registry prefix (e.g., `harbor.local:30003/microfoundry/my-app`)
+2. CLI runs `docker login` to authenticate
+3. Image is pushed to the registry
+4. An `imagePullSecret` is created in the namespace
+5. Deployment uses `imagePullSecrets` and `imagePullPolicy: Always`
+
+Without a registry configured, images remain local (suitable for Docker Desktop development).
+
+---
+
+## CLI Reference
+
+### Application Commands
+
+| Command | Description | Flags |
+|---------|-------------|-------|
+| `mf push [app]` | Build and deploy an application | `-m` memory, `-i` instances, `-p` path |
+| `mf apps` | List all deployed applications | |
+| `mf app [name]` | Show application details | |
+| `mf logs [name]` | Stream application logs | `--recent` fetch history |
+| `mf scale [name]` | Scale application instances | `-i` instances |
+| `mf delete [name]` | Delete an application | |
+
+### Service Commands
+
+| Command | Description |
+|---------|-------------|
+| `mf catalog` | Browse the service catalog |
+| `mf create-service <type> <plan> <name>` | Provision a service instance |
+| `mf services` | List provisioned services |
+| `mf service [name]` | Show service details |
+| `mf bind-service <app> <svc>` | Bind a service to an app |
+| `mf unbind-service <app> <svc>` | Unbind a service |
+| `mf delete-service [name]` | Delete a service instance |
+
+### Secret Commands
+
+| Command | Description |
+|---------|-------------|
+| `mf secrets` | List all secrets |
+| `mf secret [name]` | Show secret details |
+| `mf create-secret <name> k=v...` | Create a user secret |
+| `mf delete-secret [name]` | Delete a secret |
+
+### Platform Commands
+
+| Command | Description | Flags |
+|---------|-------------|-------|
+| `mf admin` | Start the admin web dashboard | `-p` port (default 8080), `--host` bind address |
+| `mf setup keycloak` | Deploy Keycloak | `--admin-user`, `--admin-pass`, `--port` |
+| `mf setup keycloak-realm` | Configure Keycloak realm | `--url`, `--client-secret`, `--redirect-uri` |
+| `mf setup keycloak-idp` | Add identity provider | `--provider`, `--client-id`, `--client-secret` |
+| `mf version` | Print version | |
+
+---
+
+## Local Development Tips
+
+### Host Resolution
+
+When deploying locally, `mf push` automatically adds entries to `/etc/hosts`:
+```
+127.0.0.1 hello-world.cf-local.dev
+```
+
+On Windows, the hosts file is at `C:\Windows\System32\drivers\etc\hosts`. You may need to run with admin privileges.
+
+### Ingress Controller
+
+Install an Nginx Ingress Controller for local routing:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.2/deploy/static/provider/cloud/deploy.yaml
+```
+
+### Build Targets
+
+```bash
+make build              # Build CLI to bin/mf
+make test               # Run all tests
+make lint               # Run golangci-lint
+make fmt                # Format Go code
+make tidy               # go mod tidy
+make clean              # Remove build artifacts
+make docker-build       # Build Docker image
+make install            # Install to GOPATH/bin
+make monitoring-install # Deploy monitoring stack
+```
+
+---
+
+## CloudFoundry Compatibility
+
+MicroFoundry maps CloudFoundry concepts to Kubernetes primitives:
+
+| CF Concept | MicroFoundry Equivalent |
+|------------|------------------------|
+| `cf push` | `mf push` — builds and deploys to K8s |
+| Diego Cell | Kubernetes Pod |
+| Gorouter | Ingress Controller (Nginx/Kong) |
+| Cloud Controller | MicroFoundry API Server |
+| Buildpacks | Cloud Native Buildpacks (Paketo) |
+| Service Broker | Built-in K8s-native provisioner |
+| Loggregator | Promtail + Loki |
+| Doppler/Metrics | Prometheus + Grafana + Beyla eBPF |
+| NATS (Alerts) | AlertManager |
+| UAA | Keycloak OIDC |
+| VCAP_SERVICES | Same format — injected via K8s Secrets |
+| manifest.yml | Supported — same format |
