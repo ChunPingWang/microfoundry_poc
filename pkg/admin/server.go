@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/younjinjeong/microfoundry/pkg/auth"
 	"github.com/younjinjeong/microfoundry/pkg/config"
 	"github.com/younjinjeong/microfoundry/pkg/k8s"
 	"github.com/younjinjeong/microfoundry/pkg/monitoring"
@@ -20,9 +21,33 @@ type Server struct {
 	grafana       *monitoring.GrafanaConfig
 	loki          *monitoring.LokiClient
 	alertmanager  *monitoring.AlertmanagerClient
+	prometheus    *monitoring.PrometheusClient
+	// Auth (nil when auth is disabled)
+	oidcAuth  *auth.OIDCAuthenticator
+	sessions  *auth.SessionManager
+	orgStore_ *auth.OrgStore
 }
 
-func NewServer(clientManager *k8s.ClientManager, cfg *config.Config, version string) *Server {
+// ServerOption configures optional Server features.
+type ServerOption func(*Server)
+
+// WithAuth enables OIDC authentication on the server.
+func WithAuth(oidc *auth.OIDCAuthenticator, sessions *auth.SessionManager, orgStore *auth.OrgStore) ServerOption {
+	return func(s *Server) {
+		s.oidcAuth = oidc
+		s.sessions = sessions
+		s.orgStore_ = orgStore
+	}
+}
+
+// WithOrgStore sets the org store without full OIDC (e.g. for API use).
+func WithOrgStore(orgStore *auth.OrgStore) ServerOption {
+	return func(s *Server) {
+		s.orgStore_ = orgStore
+	}
+}
+
+func NewServer(clientManager *k8s.ClientManager, cfg *config.Config, version string, opts ...ServerOption) *Server {
 	metrics := monitoring.NewMetrics(prometheus.DefaultRegisterer)
 
 	s := &Server{
@@ -43,7 +68,13 @@ func NewServer(clientManager *k8s.ClientManager, cfg *config.Config, version str
 			BaseURL:    cfg.Monitoring.AlertmanagerURL,
 			HTTPClient: &http.Client{Timeout: 10 * time.Second},
 		},
+		prometheus: monitoring.NewPrometheusClient(cfg.Monitoring.PrometheusURL),
 	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
 	s.registerRoutes()
 	return s
 }
@@ -62,12 +93,23 @@ func (s *Server) getClient(r *http.Request) (*k8s.Client, error) {
 	return s.clientManager.GetActiveClient()
 }
 
+// authEnabled returns true if OIDC authentication is configured.
+func (s *Server) authEnabled() bool {
+	return s.oidcAuth != nil
+}
+
 func (s *Server) registerRoutes() {
-	// Static CSS files
+	// Static CSS files (always public)
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(staticFS())))
 
-	// Prometheus metrics endpoint
+	// Prometheus metrics endpoint (always public)
 	s.mux.Handle("GET /metrics", monitoring.Handler())
+
+	// Auth routes (always public)
+	s.mux.HandleFunc("GET /login", s.LoginPageHandler)
+	s.mux.HandleFunc("GET /auth/login", s.AuthLoginHandler)
+	s.mux.HandleFunc("GET /auth/callback", s.AuthCallbackHandler)
+	s.mux.HandleFunc("GET /auth/logout", s.AuthLogoutHandler)
 
 	// Page routes
 	s.mux.HandleFunc("GET /{$}", s.DashboardHandler)
@@ -92,11 +134,33 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /secrets/{name}/reveal/{key}", s.SecretRevealHandler)
 	s.mux.HandleFunc("POST /secrets", s.CreateSecretHandler)
 	s.mux.HandleFunc("DELETE /secrets/{name}", s.DeleteSecretHandler)
-	s.mux.HandleFunc("GET /users", s.UsersHandler)
+
+	// Users & Orgs routes
+	s.mux.HandleFunc("GET /users", s.OrgsPageHandler)
+	s.mux.HandleFunc("POST /users/orgs", s.CreateOrgHandler)
+	s.mux.HandleFunc("DELETE /users/orgs/{id}", s.DeleteOrgHandler)
+	s.mux.HandleFunc("POST /users/orgs/{id}/members", s.InviteMemberHandler)
+	s.mux.HandleFunc("DELETE /users/orgs/{id}/members/{email}", s.RemoveMemberHandler)
+	s.mux.HandleFunc("POST /users/orgs/{id}/members/{email}/role", s.SetMemberRoleHandler)
+	s.mux.HandleFunc("POST /users/orgs/{id}/activate", s.SwitchOrgHandler)
 
 	// Monitoring routes
 	s.mux.HandleFunc("GET /monitoring", s.MonitoringHandler)
 	s.mux.HandleFunc("GET /monitoring/alerts", s.AlertsListHandler)
+
+	// Settings routes — Registry
+	s.mux.HandleFunc("GET /settings/registry", s.RegistrySettingsHandler)
+	s.mux.HandleFunc("POST /settings/registry", s.SaveRegistryHandler)
+	s.mux.HandleFunc("POST /settings/registry/test", s.TestRegistryHandler)
+	// Settings routes — Webhooks
+	s.mux.HandleFunc("GET /settings/webhooks", s.WebhooksSettingsHandler)
+	s.mux.HandleFunc("POST /settings/webhooks", s.CreateWebhookHandler)
+	s.mux.HandleFunc("DELETE /settings/webhooks/{id}", s.DeleteWebhookHandler)
+	s.mux.HandleFunc("POST /settings/webhooks/{id}/test", s.TestWebhookHandler)
+	// Settings routes — SMTP
+	s.mux.HandleFunc("GET /settings/smtp", s.SMTPSettingsHandler)
+	s.mux.HandleFunc("POST /settings/smtp", s.SaveSMTPHandler)
+	s.mux.HandleFunc("POST /settings/smtp/test", s.TestSMTPHandler)
 
 	// Catalog visibility routes
 	s.mux.HandleFunc("POST /catalog/{type}/{plan}/visibility", s.TogglePlanVisibilityHandler)
@@ -144,9 +208,70 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/topologies/{type}/{plan}", s.APITopologyDetailHandler)
 	s.mux.HandleFunc("PUT /api/topologies/{type}/{plan}", s.APISaveTopologyHandler)
 	s.mux.HandleFunc("GET /api/monitoring/alerts", s.APIAlertsHandler)
+
+	// Beyla RED metrics API routes
+	s.mux.HandleFunc("GET /api/apps/{name}/red-metrics", s.APIAppREDMetricsHandler)
+	s.mux.HandleFunc("GET /api/apps/{name}/health", s.APIAppHealthHandler)
+	s.mux.HandleFunc("GET /api/apps/{name}/observability", s.APIAppObservabilityHandler)
+
+	// Settings API routes
+	s.mux.HandleFunc("GET /api/settings", s.APIGetSettingsHandler)
+	s.mux.HandleFunc("PUT /api/settings/registry", s.APISaveRegistryHandler)
+	s.mux.HandleFunc("GET /api/settings/webhooks", s.APIGetWebhooksHandler)
+	s.mux.HandleFunc("POST /api/settings/webhooks", s.APICreateWebhookHandler)
+	s.mux.HandleFunc("DELETE /api/settings/webhooks/{id}", s.APIDeleteWebhookHandler)
+	s.mux.HandleFunc("PUT /api/settings/smtp", s.APISaveSMTPHandler)
+
+	// Org API routes
+	s.mux.HandleFunc("GET /api/orgs", s.APIListOrgsHandler)
+	s.mux.HandleFunc("GET /api/orgs/{id}", s.APIGetOrgHandler)
+	s.mux.HandleFunc("POST /api/orgs", s.APICreateOrgHandler)
+	s.mux.HandleFunc("GET /api/orgs/{id}/members", s.APIListMembersHandler)
 }
 
 func (s *Server) ListenAndServe(addr string) error {
-	handler := monitoring.InstrumentHandler(s.metrics, s.mux)
+	var handler http.Handler = s.mux
+
+	// Apply auth middleware chain if auth is enabled
+	if s.authEnabled() {
+		// InjectUser always runs (adds user to context if session exists)
+		handler = auth.InjectUser(s.sessions)(handler)
+	}
+
+	handler = monitoring.InstrumentHandler(s.metrics, handler)
 	return http.ListenAndServe(addr, handler)
+}
+
+// Auth route handlers — delegate to OIDC authenticator or show login page
+
+func (s *Server) LoginPageHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.authEnabled() {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	s.templates.Render(w, "login.html", nil)
+}
+
+func (s *Server) AuthLoginHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.authEnabled() {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	s.oidcAuth.LoginHandler(w, r)
+}
+
+func (s *Server) AuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.authEnabled() {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	s.oidcAuth.CallbackHandler(w, r)
+}
+
+func (s *Server) AuthLogoutHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.authEnabled() {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	s.oidcAuth.LogoutHandler(w, r)
 }

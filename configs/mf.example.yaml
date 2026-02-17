@@ -31,6 +31,33 @@ admin:
   host: "0.0.0.0"
 
 monitoring:
-  grafana_url: "http://grafana.cf-local.dev"
+  grafana_url: "http://localhost:3000"
   loki_url: "http://loki.monitoring.svc.cluster.local:3100"
   alertmanager_url: "http://kube-prometheus-kube-prome-alertmanager.monitoring.svc.cluster.local:9093"
+  prometheus_url: "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090"
+  beyla_enabled: true
+
+# Container registry (file-based defaults; admin UI settings stored in K8s take precedence)
+# registry:
+#   url: "harbor.local:30003"
+#   project: "microfoundry"
+#   username: "admin"
+#   insecure: false
+
+# SMTP server (file-based defaults; admin UI settings stored in K8s take precedence)
+# smtp:
+#   host: "smtp.gmail.com"
+#   port: 587
+#   username: "user@example.com"
+#   from_addr: "noreply@microfoundry.local"
+#   tls: true
+
+# Authentication (Keycloak OIDC)
+# Run `mf setup keycloak` to deploy Keycloak, then enable auth here.
+# auth:
+#   enabled: true
+#   issuer_url: "http://localhost:8180/realms/microfoundry"
+#   client_id: "mf-admin"
+#   client_secret: "your-client-secret"
+#   redirect_url: "http://localhost:8080/auth/callback"
+#   session_key: ""  # 64-char hex string; auto-generated if empty

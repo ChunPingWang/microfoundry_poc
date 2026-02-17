@@ -10,7 +10,7 @@ data:
     {
       "uid": "mf-app-detail",
       "title": "MicroFoundry App Detail",
-      "tags": ["microfoundry", "app"],
+      "tags": ["microfoundry", "app", "red", "beyla"],
       "timezone": "browser",
       "refresh": "30s",
       "time": { "from": "now-1h", "to": "now" },
@@ -18,19 +18,146 @@ data:
         "list": [
           {
             "name": "app",
-            "type": "custom",
+            "type": "query",
+            "query": "label_values(kube_deployment_labels{namespace=\"microfoundry\", label_app_kubernetes_io_managed_by=\"microfoundry\"}, deployment)",
             "current": { "text": "hello-world", "value": "hello-world" },
-            "query": "",
-            "label": "Application"
+            "label": "Application",
+            "refresh": 2,
+            "sort": 1
           }
         ]
       },
       "panels": [
         {
+          "id": 10,
+          "title": "RED Metrics (Beyla eBPF)",
+          "type": "row",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "collapsed": false
+        },
+        {
+          "id": 11,
+          "title": "Request Rate",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+          "targets": [{
+            "expr": "microfoundry:http_request_rate:5m{k8s_deployment_name=\"$app\"}",
+            "legendFormat": ""
+          }],
+          "fieldConfig": { "defaults": { "unit": "reqps", "thresholds": { "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}] } } }
+        },
+        {
+          "id": 12,
+          "title": "Error Rate",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "targets": [{
+            "expr": "microfoundry:http_error_rate:5m{k8s_deployment_name=\"$app\"}",
+            "legendFormat": ""
+          }],
+          "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.01}, {"color": "red", "value": 0.05}] } } }
+        },
+        {
+          "id": 13,
+          "title": "P50 Latency",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+          "targets": [{
+            "expr": "microfoundry:http_latency_p50:5m{k8s_deployment_name=\"$app\"}",
+            "legendFormat": ""
+          }],
+          "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}] } } }
+        },
+        {
+          "id": 14,
+          "title": "P95 Latency",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+          "targets": [{
+            "expr": "microfoundry:http_latency_p95:5m{k8s_deployment_name=\"$app\"}",
+            "legendFormat": ""
+          }],
+          "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 2}] } } }
+        },
+        {
+          "id": 15,
+          "title": "P99 Latency",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+          "targets": [{
+            "expr": "microfoundry:http_latency_p99:5m{k8s_deployment_name=\"$app\"}",
+            "legendFormat": ""
+          }],
+          "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1.5}, {"color": "red", "value": 3}] } } }
+        },
+        {
+          "id": 16,
+          "title": "Request Rate Over Time",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+          "targets": [{
+            "expr": "sum by (http_route) (rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"microfoundry\", k8s_deployment_name=\"$app\"}[5m]))",
+            "legendFormat": "{{ http_route }}"
+          }],
+          "fieldConfig": { "defaults": { "unit": "reqps" } }
+        },
+        {
+          "id": 17,
+          "title": "Latency Percentiles Over Time",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_request_duration_seconds_bucket{k8s_namespace_name=\"microfoundry\", k8s_deployment_name=\"$app\"}[5m])))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{k8s_namespace_name=\"microfoundry\", k8s_deployment_name=\"$app\"}[5m])))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{k8s_namespace_name=\"microfoundry\", k8s_deployment_name=\"$app\"}[5m])))",
+              "legendFormat": "p99"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" } }
+        },
+        {
+          "id": 18,
+          "title": "Status Code Distribution",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+          "targets": [{
+            "expr": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"microfoundry\", k8s_deployment_name=\"$app\"}[5m]))",
+            "legendFormat": "{{ http_response_status_code }}"
+          }],
+          "fieldConfig": { "defaults": { "unit": "reqps" } },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 19,
+          "title": "Request Duration Heatmap",
+          "type": "heatmap",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+          "targets": [{
+            "expr": "sum by (le) (increase(http_server_request_duration_seconds_bucket{k8s_namespace_name=\"microfoundry\", k8s_deployment_name=\"$app\"}[5m]))",
+            "legendFormat": "{{ le }}",
+            "format": "heatmap"
+          }],
+          "options": { "yAxis": { "unit": "s" } }
+        },
+        {
+          "id": 20,
+          "title": "Resource Metrics",
+          "type": "row",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 },
+          "collapsed": false
+        },
+        {
           "id": 1,
           "title": "CPU Usage",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
           "targets": [{
             "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"microfoundry\", pod=~\"$app.*\", container!=\"\"}[5m])) by (pod)",
             "legendFormat": "{{ pod }}"
@@ -41,7 +168,7 @@ data:
           "id": 2,
           "title": "Memory Usage",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
           "targets": [{
             "expr": "sum(container_memory_working_set_bytes{namespace=\"microfoundry\", pod=~\"$app.*\", container!=\"\"}) by (pod)",
             "legendFormat": "{{ pod }}"
@@ -52,7 +179,7 @@ data:
           "id": 3,
           "title": "Network I/O",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
           "targets": [
             {
               "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"microfoundry\", pod=~\"$app.*\"}[5m])) by (pod)",
@@ -69,7 +196,7 @@ data:
           "id": 4,
           "title": "Pod Restarts",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
           "targets": [{
             "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"microfoundry\", pod=~\"$app.*\"}) by (pod)",
             "legendFormat": "{{ pod }}"
@@ -79,7 +206,7 @@ data:
           "id": 5,
           "title": "Application Logs",
           "type": "logs",
-          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 38 },
           "targets": [{
             "expr": "{namespace=\"microfoundry\", app=\"$app\"}",
             "refId": "A"

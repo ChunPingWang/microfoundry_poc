@@ -1,5 +1,49 @@
 {{define "tab_logs.html"}}
 <div class="space-y-6">
+    <!-- RED Metrics Summary Banner (from Beyla) -->
+    {{$red := index . "RED"}}
+    {{$beyla := index . "BeylaEnabled"}}
+    {{if and $beyla $red $red.HasData}}
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                </svg>
+                <span class="text-sm font-medium text-blue-800">Live Application Metrics</span>
+                <span class="text-xs text-blue-500">(Beyla eBPF)</span>
+            </div>
+            <a href="/apps/{{index . "Name"}}?tab=performance"
+               hx-get="/apps/{{index . "Name"}}/tab/performance"
+               hx-target="#tab-content"
+               hx-push-url="/apps/{{index . "Name"}}?tab=performance"
+               class="text-xs text-blue-600 hover:underline">View details</a>
+        </div>
+        <div class="grid grid-cols-5 gap-4 mt-3">
+            <div class="text-center">
+                <p class="text-lg font-bold text-gray-900">{{fmtFloat $red.RequestRate 1}}</p>
+                <p class="text-xs text-gray-500">req/s</p>
+            </div>
+            <div class="text-center">
+                <p class="text-lg font-bold {{if gt $red.ErrorRate 0.05}}text-red-600{{else}}text-green-600{{end}}">{{fmtFloat (mul $red.ErrorRate 100) 1}}%</p>
+                <p class="text-xs text-gray-500">errors</p>
+            </div>
+            <div class="text-center">
+                <p class="text-lg font-bold text-gray-900">{{fmtMs $red.LatencyP50}}</p>
+                <p class="text-xs text-gray-500">p50</p>
+            </div>
+            <div class="text-center">
+                <p class="text-lg font-bold text-gray-900">{{fmtMs $red.LatencyP95}}</p>
+                <p class="text-xs text-gray-500">p95</p>
+            </div>
+            <div class="text-center">
+                <p class="text-lg font-bold {{if gt $red.LatencyP99 2.0}}text-red-600{{else}}text-gray-900{{end}}">{{fmtMs $red.LatencyP99}}</p>
+                <p class="text-xs text-gray-500">p99</p>
+            </div>
+        </div>
+    </div>
+    {{end}}
+
     <!-- Historical Logs (Loki) -->
     <div class="bg-gray-50 rounded-lg p-4">
         <div class="flex items-center justify-between mb-3">
@@ -12,7 +56,7 @@
                     <option value="6h">Last 6 hours</option>
                     <option value="24h">Last 24 hours</option>
                 </select>
-                <button hx-get="/apps/{{.Name}}/logs/history"
+                <button hx-get="/apps/{{index . "Name"}}/logs/history"
                         hx-target="#log-history-result"
                         hx-include="#log-duration"
                         hx-params="duration"
@@ -36,7 +80,7 @@
     <div class="flex items-center justify-between mb-4">
         <p class="text-sm text-gray-500">Live log stream from all instances</p>
         <button id="log-toggle"
-                onclick="toggleLogs('{{.Name}}')"
+                onclick="toggleLogs('{{index . "Name"}}')"
                 class="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
             Start Streaming
         </button>

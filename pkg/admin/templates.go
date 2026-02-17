@@ -117,6 +117,21 @@ func templateFuncs() template.FuncMap {
 			}
 			return d
 		},
+		"mul": func(a, b float64) float64 {
+			return a * b
+		},
+		"fmtFloat": func(f float64, prec int) string {
+			return fmt.Sprintf("%.*f", prec, f)
+		},
+		"fmtMs": func(seconds float64) string {
+			if seconds < 0.001 {
+				return fmt.Sprintf("%.0fus", seconds*1e6)
+			}
+			if seconds < 1 {
+				return fmt.Sprintf("%.1fms", seconds*1000)
+			}
+			return fmt.Sprintf("%.2fs", seconds)
+		},
 	}
 }
 
@@ -156,6 +171,10 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"topology_detail.html",
 		"topology_upload.html",
 		"monitoring.html",
+		"settings_registry.html",
+		"settings_webhooks.html",
+		"settings_smtp.html",
+		"login.html",
 	}
 
 	pages := make(map[string]*template.Template, len(pageFiles)+3)
@@ -182,9 +201,10 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"tab_services.html":  base,
 		"tab_routes.html":    base,
 		"tab_logs.html":      base,
-		"tab_metrics.html":   base,
-		"alerts_list.html":   base,
-		"log_history.html":   base,
+		"tab_metrics.html":      base,
+		"tab_performance.html":  base,
+		"alerts_list.html":      base,
+		"log_history.html":      base,
 	}
 
 	return &TemplateRenderer{base: base, pages: pages, partials: partials}

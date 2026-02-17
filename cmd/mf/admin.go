@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/younjinjeong/microfoundry/pkg/admin"
+	"github.com/younjinjeong/microfoundry/pkg/auth"
 	"github.com/younjinjeong/microfoundry/pkg/config"
 	"github.com/younjinjeong/microfoundry/pkg/k8s"
 	"github.com/younjinjeong/microfoundry/pkg/monitoring"
@@ -30,7 +31,41 @@ func adminCmd() *cobra.Command {
 				cfg.Kubernetes.Active,
 			)
 
-			srv := admin.NewServer(clientManager, cfg, version)
+			// Build server options
+			var opts []admin.ServerOption
+
+			// Initialize auth if enabled
+			if cfg.Auth.Enabled {
+				ctx := context.Background()
+				sessions := auth.NewSessionManager(cfg.Auth.SessionKey)
+
+				// Get active K8s client for org store
+				activeClient, err := clientManager.GetActiveClient()
+				if err != nil {
+					return fmt.Errorf("connecting to cluster for auth: %w", err)
+				}
+
+				orgStore := auth.NewOrgStore(activeClient.Clientset, activeClient.Namespace)
+
+				authCfg := auth.AuthConfig{
+					Enabled:      cfg.Auth.Enabled,
+					IssuerURL:    cfg.Auth.IssuerURL,
+					ClientID:     cfg.Auth.ClientID,
+					ClientSecret: cfg.Auth.ClientSecret,
+					RedirectURL:  cfg.Auth.RedirectURL,
+					SessionKey:   cfg.Auth.SessionKey,
+				}
+
+				oidcAuth, err := auth.NewOIDCAuthenticator(ctx, authCfg, sessions, orgStore)
+				if err != nil {
+					return fmt.Errorf("initializing OIDC: %w", err)
+				}
+
+				opts = append(opts, admin.WithAuth(oidcAuth, sessions, orgStore))
+				fmt.Printf("Authentication enabled (Keycloak: %s)\n", cfg.Auth.IssuerURL)
+			}
+
+			srv := admin.NewServer(clientManager, cfg, version, opts...)
 
 			// Start background metrics collector
 			ctx, cancel := context.WithCancel(context.Background())

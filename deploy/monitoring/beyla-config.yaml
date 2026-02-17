@@ -1,0 +1,169 @@
+# Grafana Beyla - eBPF auto-instrumentation for MicroFoundry applications
+# Netflix Atlas/Spectator-inspired: zero-code HTTP metrics collection
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beyla-config
+  namespace: monitoring
+data:
+  beyla-config.yml: |
+    log_level: info
+    discovery:
+      services:
+        - k8s_namespace: microfoundry
+          k8s_pod_labels:
+            app.kubernetes.io/managed-by: microfoundry
+    prometheus_export:
+      port: 9090
+      path: /metrics
+    routes:
+      patterns:
+        - /api/{_}/{_}
+        - /api/{_}
+        - /health
+        - /ready
+        - /metrics
+      unmatch: heuristic
+    attributes:
+      kubernetes:
+        enable: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: beyla
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: beyla
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "services", "endpoints", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: beyla
+subjects:
+  - kind: ServiceAccount
+    name: beyla
+    namespace: monitoring
+roleRef:
+  kind: ClusterRole
+  name: beyla
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: beyla
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: beyla
+    app.kubernetes.io/component: auto-instrumentation
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beyla
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: beyla
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: beyla
+      hostPID: true
+      # Schedule on Linux nodes; tolerate all taints so Beyla covers every node
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: beyla
+          image: grafana/beyla:1.8.5@sha256:2a08ed4cc8b62a9e39e956a8dce3b30efbce7514e073afa4f2c4f73d43d0b7c1
+          securityContext:
+            privileged: false
+            runAsUser: 0
+            capabilities:
+              add: ["BPF", "PERFMON", "NET_ADMIN", "SYS_PTRACE"]
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          ports:
+            - containerPort: 9090
+              name: metrics
+              protocol: TCP
+          env:
+            - name: BEYLA_CONFIG_PATH
+              value: /config/beyla-config.yml
+            - name: BEYLA_BPF_BATCH_MAP_SIZE
+              value: "32"
+            - name: BEYLA_OPEN_PORT
+              value: "80,443,8080,8443,3000,9090"
+            - name: BEYLA_BPF_TRACK_REQUEST_HEADERS
+              value: "false"
+          volumeMounts:
+            - name: beyla-config
+              mountPath: /config
+              readOnly: true
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+      volumes:
+        - name: beyla-config
+          configMap:
+            name: beyla-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: beyla-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: beyla
+spec:
+  selector:
+    app.kubernetes.io/name: beyla
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: beyla-metrics
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+    app.kubernetes.io/name: beyla
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beyla
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+    - port: metrics
+      interval: 15s
+      path: /metrics
+      relabelings:
+        - targetLabel: cluster
+          replacement: docker-desktop
+        - targetLabel: managed_by
+          replacement: microfoundry

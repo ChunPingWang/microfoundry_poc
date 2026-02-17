@@ -14,6 +14,37 @@ type Config struct {
 	GitHub     GitHubConfig     `mapstructure:"github"`
 	Kubernetes KubernetesConfig `mapstructure:"kubernetes"`
 	Monitoring MonitoringConfig `mapstructure:"monitoring"`
+	Registry   RegistryConfig   `mapstructure:"registry"`
+	SMTP       SMTPConfig       `mapstructure:"smtp"`
+	Auth       AuthConfig       `mapstructure:"auth"`
+}
+
+// RegistryConfig provides file-based defaults for container registry settings.
+// Runtime settings from the admin UI (stored in K8s ConfigMap) take precedence.
+type RegistryConfig struct {
+	URL      string `mapstructure:"url"`
+	Project  string `mapstructure:"project"`
+	Username string `mapstructure:"username"`
+	Insecure bool   `mapstructure:"insecure"`
+}
+
+// SMTPConfig provides file-based defaults for SMTP settings.
+type SMTPConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	FromAddr string `mapstructure:"from_addr"`
+	TLS      bool   `mapstructure:"tls"`
+}
+
+// AuthConfig holds OIDC/Keycloak authentication settings.
+type AuthConfig struct {
+	Enabled      bool   `mapstructure:"enabled"`
+	IssuerURL    string `mapstructure:"issuer_url"`
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURL  string `mapstructure:"redirect_url"`
+	SessionKey   string `mapstructure:"session_key"`
 }
 
 // MonitoringConfig holds endpoints for the monitoring stack.
@@ -21,6 +52,8 @@ type MonitoringConfig struct {
 	GrafanaURL      string `mapstructure:"grafana_url"`
 	LokiURL         string `mapstructure:"loki_url"`
 	AlertmanagerURL string `mapstructure:"alertmanager_url"`
+	PrometheusURL   string `mapstructure:"prometheus_url"`
+	BeylaEnabled    bool   `mapstructure:"beyla_enabled"`
 }
 
 type GitHubConfig struct {
@@ -124,9 +157,11 @@ func Load() (*Config, error) {
 	v.SetDefault("github.repo", "microfoundry")
 	v.SetDefault("kubernetes.context", "docker-desktop")
 	v.SetDefault("kubernetes.namespace", "microfoundry")
-	v.SetDefault("monitoring.grafana_url", "http://grafana.cf-local.dev")
+	v.SetDefault("monitoring.grafana_url", "http://localhost:3000")
 	v.SetDefault("monitoring.loki_url", "http://loki.monitoring.svc.cluster.local:3100")
 	v.SetDefault("monitoring.alertmanager_url", "http://kube-prometheus-kube-prome-alertmanager.monitoring.svc.cluster.local:9093")
+	v.SetDefault("monitoring.prometheus_url", "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090")
+	v.SetDefault("monitoring.beyla_enabled", true)
 
 	// Read config file (optional — not an error if missing)
 	if err := v.ReadInConfig(); err != nil {
