@@ -593,19 +593,43 @@ Every issue and PR receives comments from 7 specialized agent personas, each bri
 | **QA Engineer** | Designs test plans, verification matrices, regression checks | Unit/integration/manual test cases, edge cases, acceptance criteria |
 | **Product Manager** | Assesses scope, user impact, prioritization | User stories, release blocking decisions, success metrics, communication |
 
-### Branch Strategy
+### Branch Strategy: Release-Candidate Flow
+
+We use a **three-tier branching model** designed for structured integration and safe promotion:
 
 ```
-main (stable release)
-  └── rc (release-candidate, integration branch)
+main (stable release — production-ready)
+  └── rc (release-candidate — integration & validation)
         ├── epic/feature-a  →  PR targets rc
         ├── epic/feature-b  →  PR targets rc
         └── epic/feature-c  →  PR targets rc
 ```
 
-- **`main`** — Stable release branch. Only validated `rc` merges into `main`.
-- **`rc`** — Integration branch. All Epic PRs target `rc`.
-- **`epic/*`** — Feature branches created from `rc`. Each is independent.
+| Branch | Purpose | Merges From | Merges To |
+|--------|---------|-------------|-----------|
+| **`main`** | Stable release. Always deployable. Tagged for releases. | `rc` only | — |
+| **`rc`** | Integration branch. All Epics land here first. Validated before promoting to `main`. | `epic/*` branches | `main` |
+| **`epic/*`** | Feature branches. One per Epic. Created from `rc`, never from `main` or another epic. | — | `rc` |
+
+**Key rules:**
+
+1. **All PRs target `rc`**, never `main` directly
+2. **Epic branches are independent** — never stack PRs by merging one epic into another
+3. **Analyzer checks dependencies** — before starting a new Epic, verify no open PRs conflict
+4. **`rc` → `main` promotion** happens when a set of features is validated (build passes, agents reviewed, human approved)
+5. **Fast-forward merges preferred** for `rc` → `main` to keep clean history
+
+**Typical flow:**
+
+```
+git checkout rc && git pull origin rc
+git checkout -b epic/new-feature        # Branch from rc
+# ... implement ...
+gh pr create --base rc                  # PR targets rc
+# ... agent review + human merge ...
+# When ready to release:
+git checkout main && git merge rc       # Promote to main
+```
 
 ### Why This Workflow?
 
