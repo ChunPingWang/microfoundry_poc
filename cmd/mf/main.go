@@ -18,6 +18,10 @@ func main() {
 		Version: version,
 	}
 
+	setupRoot := setupCmd()
+	setupRoot.AddCommand(setupKeycloakRealmCmd())
+	setupRoot.AddCommand(setupKeycloakIdPCmd())
+
 	rootCmd.AddCommand(
 		versionCmd(),
 		pushCmd(),
@@ -38,6 +42,7 @@ func main() {
 		secretDetailCmd(),
 		createSecretCmd(),
 		deleteSecretCmd(),
+		setupRoot,
 	)
 
 	if err := rootCmd.Execute(); err != nil {
