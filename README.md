@@ -1,24 +1,119 @@
 # MicroFoundry
 
-A micro CloudFoundry for Kubernetes — lightweight implementation of CF core concepts with cloud-native infrastructure.
+**A micro CloudFoundry for Kubernetes** — lightweight PaaS that preserves the CloudFoundry developer experience while running on cloud-native infrastructure.
 
-MicroFoundry preserves the CloudFoundry developer experience (`cf push`, service binding, route management, `cf logs`) while replacing the heavyweight BOSH/Diego infrastructure with Kubernetes, managed cloud services, and modern observability. The goal is **simplicity**: instead of operating dozens of CF components, MicroFoundry delegates to Kubernetes primitives and CSP-native services.
+MicroFoundry replaces the heavyweight BOSH/Diego runtime with Kubernetes, managed cloud services, and modern observability. The result: `cf push`-style deployments, OSBAPI service binding, Loggregator-equivalent logging — all backed by Kubernetes, Prometheus, Loki, and Grafana Beyla.
+
+> **Built with AI** — This project is developed through a structured Human-AI collaborative workflow using [Claude Code](https://claude.ai/claude-code). Every Epic goes through a 7-agent review process covering security, platform engineering, API design, frontend, DevOps, QA, and product management. See [How We Build](#how-we-build-human-ai-collaborative-development) for details.
 
 ---
 
-## Design Objectives
+## Highlights
 
-1. **Lightweight CloudFoundry Core** — Implement the essential CloudFoundry concepts (Buildpack, Service Broker, Service Catalog, Loggregator, Metrics & Alerts, CLI) without the operational complexity of full CF deployment.
+- **`mf push`** — Build and deploy from source (Dockerfile or Cloud Native Buildpacks)
+- **10 backing services** — MariaDB, PostgreSQL, Redis, RabbitMQ, MinIO, Kong, and more with real K8s provisioning
+- **Zero-code observability** — Grafana Beyla eBPF auto-instruments all HTTP traffic for RED metrics
+- **Multi-cluster** — Manage Docker Desktop, EKS, GKE, AKS clusters from a single control plane
+- **Admin Dashboard** — Full-featured web UI with HTMX (no JS build step)
+- **Keycloak IAM** — OIDC authentication, SCIM v2 provisioning, OPA authorization
+- **MCP Server** — AI tools can deploy, scale, and manage apps via Model Context Protocol
+- **Single binary** — One Go binary, no external dependencies beyond Kubernetes
 
-2. **Full CF Developer Experience** — Buildpack-based builds, OSBAPI-compatible Service Broker, Service Catalog with plans, Loggregator-style log aggregation, Prometheus/Grafana metrics and alerting, and `cf push`-style CLI.
+---
 
-3. **Multi-Cloud Kubernetes Runtime** — Use Kubernetes from every major CSP (EKS, GKE, AKS) and on-premise (Docker Desktop, bare-metal) as the universal runtime. No VM-based deployment.
+## Admin Dashboard
 
-4. **Network-Aware Service Integration** — Handle network allocation between Kubernetes clusters and backing services (databases, caches, message queues) with proper service discovery and credential injection.
+The built-in admin dashboard (`mf admin`, default `:8080`) provides a complete platform management experience.
 
-5. **Pluggable API Gateway Routing** — Place API Gateways (AWS API Gateway, Nginx, Kong, etc.) in the network routing path for endpoint access, rate limiting, TLS termination, and authentication.
+### Dashboard Overview
 
-6. **AI-Native Platform Access** — Expose the full platform as an MCP (Model Context Protocol) server and support AI Agent workloads, enabling AI tools to deploy, manage, and monitor applications directly.
+The main dashboard shows platform stats, deployed application count, active domain, namespace, and Kubernetes context at a glance.
+
+<!-- Screenshot: Dashboard with 4 stat cards (Applications, Domain, Namespace, K8s Context) and quick links -->
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="MicroFoundry Dashboard" width="900">
+</p>
+
+### Applications
+
+List all deployed applications with state, instance count, memory, build type, and routes. Real-time auto-refresh every 10 seconds.
+
+<!-- Screenshot: Applications list showing deployed apps with status badges, instance counts, and action buttons -->
+<p align="center">
+  <img src="docs/images/apps-list.png" alt="Applications List" width="900">
+</p>
+
+### Application Detail — 8-Tab View
+
+Each application has a detailed view with 8 tabs: Overview, Instances, Config, Services, Routes, Logs, Metrics, and Performance.
+
+<!-- Screenshot: App detail page showing the tabbed interface with Overview tab active -->
+<p align="center">
+  <img src="docs/images/app-detail.png" alt="Application Detail" width="900">
+</p>
+
+### Performance & Observability
+
+Netflix Atlas-inspired auto-instrumentation using Grafana Beyla (eBPF). Applications get full RED metrics (Rate, Errors, Duration) without any code changes — like Netflix Spectator auto-injects into JVM apps, but using eBPF for any language.
+
+<!-- Screenshot: Performance tab showing RED metric stat cards, Grafana panels, and correlated logs -->
+<p align="center">
+  <img src="docs/images/app-performance.png" alt="App Performance Tab" width="900">
+</p>
+
+### Service Catalog
+
+Browse services by category (Databases, Caches, Messaging, Storage, API Gateways). Each service type offers 3 plans (small/medium/large) with configurable Terraform topologies and plan visibility controls.
+
+<!-- Screenshot: Service Catalog showing category-grouped services with plan tables and visibility toggles -->
+<p align="center">
+  <img src="docs/images/catalog.png" alt="Service Catalog" width="900">
+</p>
+
+### Multi-Cluster Management
+
+Register and manage multiple Kubernetes clusters (Docker Desktop, EKS, GKE, AKS). Switch active clusters, monitor health, and deploy across environments.
+
+<!-- Screenshot: Clusters page showing registered clusters with provider badges, status, and set-active controls -->
+<p align="center">
+  <img src="docs/images/clusters.png" alt="Multi-Cluster Management" width="900">
+</p>
+
+### Monitoring & Alerts
+
+Integrated Prometheus alerting with embedded Grafana dashboards. Pre-configured alerts: `MFAppHighErrorRate`, `MFAppHighLatency`, `MFAppNoTraffic`, `MFBeylaDown`.
+
+<!-- Screenshot: Monitoring page showing active alerts section and embedded Grafana dashboards -->
+<p align="center">
+  <img src="docs/images/monitoring.png" alt="Monitoring & Alerts" width="900">
+</p>
+
+### Secrets Management
+
+View and manage service secrets (auto-created on service provisioning) and user-defined secrets. Reveal individual secret values with a click.
+
+<!-- Screenshot: Secrets list with type badges (Service/User-defined), key counts, and reveal toggles -->
+<p align="center">
+  <img src="docs/images/secrets.png" alt="Secrets Management" width="900">
+</p>
+
+### Users, Organizations & IAM
+
+Keycloak-integrated identity and access management with 4 tabs: Organizations, Users, Policies (OPA Rego), and Audit Log.
+
+<!-- Screenshot: Users & Organizations page showing the tabbed IAM interface -->
+<p align="center">
+  <img src="docs/images/users-iam.png" alt="Users & IAM" width="900">
+</p>
+
+### Platform Settings
+
+Configure container registry (Harbor/Docker Hub), webhooks (event notifications), and SMTP (email) — all stored in Kubernetes ConfigMaps and Secrets.
+
+<!-- Screenshot: Settings page showing Registry configuration form -->
+<p align="center">
+  <img src="docs/images/settings.png" alt="Platform Settings" width="900">
+</p>
 
 ---
 
@@ -56,13 +151,13 @@ MicroFoundry preserves the CloudFoundry developer experience (`cf push`, service
                     ┌───────────────────────┼───────────────────────┐
                     │                       │                       │
             ┌───────▽───────┐       ┌───────▽───────┐      ┌───────▽───────┐
-            │ API Gateway   │       │ Backing       │      │ Secret        │
-            │ (Kong/Nginx/  │       │ Services      │      │ Store         │
-            │  AWS API GW)  │       │ (DB/Cache/MQ) │      │ (K8s Secrets) │
+            │ API Gateway   │       │ Backing       │      │ IAM           │
+            │ (Kong/Nginx/  │       │ Services      │      │ Keycloak OIDC │
+            │  AWS API GW)  │       │ (DB/Cache/MQ) │      │ OPA + SCIM v2 │
             └───────────────┘       └───────────────┘      └───────────────┘
 ```
 
-### Multi-Cluster Kubernetes Runtime
+### Multi-Cluster Runtime
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -84,59 +179,27 @@ MicroFoundry preserves the CloudFoundry developer experience (`cf push`, service
 
 ---
 
-## CloudFoundry → MicroFoundry Mapping
+## CloudFoundry Mapping
 
 | CF Component | MicroFoundry Equivalent | Implementation |
 |---|---|---|
 | **Diego Cell** | Kubernetes Pod | K8s Deployment + Service + Ingress |
-| **Gorouter** | API Gateway (Kong / Nginx / AWS API GW) | Pluggable ingress controller in routing path |
+| **Gorouter** | API Gateway (Kong / Nginx / AWS API GW) | Pluggable ingress controller |
 | **Cloud Controller** | MicroFoundry API Server (Go) | Lightweight API → K8s API directly |
 | **Buildpacks** | Cloud Native Buildpacks (CNB/Paketo) | Source-to-container without Dockerfile |
 | **Service Broker** | Built-in K8s-native Broker | 10 service types with real K8s provisioning |
 | **Service Catalog** | Built-in Catalog (10 services) | MariaDB, PostgreSQL, Redis, RabbitMQ, MinIO, Kong, etc. |
 | **Loggregator** | Promtail + Loki | Log collection per pod → Loki aggregation |
-| **Doppler/Metrics** | Prometheus + Grafana + Beyla eBPF | Auto-instrumented RED metrics (Netflix Atlas-inspired) |
+| **Doppler/Metrics** | Prometheus + Grafana + Beyla eBPF | Auto-instrumented RED metrics |
 | **NATS (Alerts)** | AlertManager | Prometheus alerting rules + AlertManager |
 | **Config Server** | K8s Secrets + ConfigMaps | VCAP_SERVICES injection + platform settings |
-| **UAA** | Keycloak OIDC + gorilla/sessions | Authorization code flow with PKCE, social login |
-| **Blobstore** | S3 / GCS / MinIO | Managed object storage for artifacts |
+| **UAA** | Keycloak OIDC + OPA + SCIM v2 | OIDC auth, Rego policies, standard provisioning |
 | **CF CLI** | `mf` CLI (Cobra) | 20+ commands mirroring CF CLI |
 | **— (new)** | MCP Server | AI tool integration via Model Context Protocol |
-
-See [docs/cloudfoundry-architecture.md](docs/cloudfoundry-architecture.md) for the full CF architecture reference.
 
 ---
 
 ## Developer Experience
-
-### Two Interfaces: CLI and MCP
-
-```
-╭──────────────────────────────────────────────────────────────────╮
-│                        Developer / AI                             │
-╰───────────────┬──────────────────────────────┬───────────────────╯
-                │                              │
-        ┌───────▽───────┐              ┌───────▽───────┐
-        │  mf push      │              │  Claude Code  │
-        │  mf logs      │              │  Cursor, etc. │
-        │  mf bind      │              │  (AI Tools)   │
-        └───────┬───────┘              └───────┬───────┘
-                │                              │
-        ┌───────▽───────┐              ┌───────▽───────┐
-        │  MicroFoundry │              │  MicroFoundry │
-        │  CLI (mf)     │              │  MCP Server   │
-        └───────┬───────┘              └───────┬───────┘
-                │                              │
-                ╰──────────────┬───────────────╯
-                       ┌───────▽───────┐
-                       │  MicroFoundry │
-                       │  API Server   │
-                       └───────┬───────┘
-                               │
-                       ┌───────▽───────┐
-                       │  Kubernetes   │
-                       └───────────────┘
-```
 
 ### CLI Commands
 
@@ -165,25 +228,23 @@ See [docs/cloudfoundry-architecture.md](docs/cloudfoundry-architecture.md) for t
 
 ### MCP Server Tools
 
-| MCP Tool | CF Equivalent | Description |
-|---|---|---|
-| `mf_push` | `cf push` | Deploy an application from source |
-| `mf_logs` | `cf logs` | Stream or fetch application logs |
-| `mf_bind_service` | `cf bind-service` | Bind a backing service to an app |
-| `mf_create_service` | `cf create-service` | Provision a backing service instance |
-| `mf_routes` | `cf routes` | List or manage application routes |
-| `mf_scale` | `cf scale` | Scale app instances or resources |
-| `mf_env` | `cf env` | View or set environment variables |
-| `mf_apps` | `cf apps` | List deployed applications |
-| `mf_delete` | `cf delete` | Remove a deployed application |
+| MCP Tool | Description |
+|---|---|
+| `mf_push` | Deploy an application from source |
+| `mf_logs` | Stream or fetch application logs |
+| `mf_bind_service` | Bind a backing service to an app |
+| `mf_create_service` | Provision a backing service instance |
+| `mf_routes` | List or manage application routes |
+| `mf_scale` | Scale app instances or resources |
+| `mf_env` | View or set environment variables |
+| `mf_apps` | List deployed applications |
+| `mf_delete` | Remove a deployed application |
 
 ---
 
 ## Platform Capabilities
 
-### 1. Application Lifecycle
-
-Deploy any application from source with a single command:
+### Application Lifecycle
 
 ```bash
 $ mf push hello-world
@@ -201,15 +262,7 @@ Waiting for rollout...    [3/3 instances running]
    dashboard:  http://localhost:8080/apps/hello-world?tab=performance
 ```
 
-- **Build strategies**: Dockerfile → Cloud Native Buildpacks (Paketo) → pack CLI (auto-detected)
-- **Registry integration**: Optional push to Harbor/Docker Hub with imagePullSecret management
-- **Health checks**: HTTP, Port, Process
-- **Scaling**: `mf scale hello-world -i 5`
-- **Environment variables**: CF manifest.yml compatible
-
-### 2. Service Broker & Catalog
-
-K8s-native service provisioning with built-in catalog:
+### Service Broker & Catalog
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -230,23 +283,7 @@ $ mf create-service postgresql small my-db
 $ mf bind-service hello-world my-db    # Injects VCAP_SERVICES
 ```
 
-**Service Binding Flow:**
-
-```
-mf bind-service hello-world my-db
-        │
-        ▽
-┌───────────────┐     ┌────────────────┐     ┌──────────────────┐
-│ Create Secret │────▶│ Mount as env   │────▶│ Inject into Pod  │
-│ mf-svc-my-db  │     │ VCAP_SERVICES  │     │ envFrom: secret  │
-└───────────────┘     └────────────────┘     └──────────────────┘
-```
-
-Credentials are stored in K8s Secrets and injected as `VCAP_SERVICES` environment variable — exactly like CloudFoundry.
-
-### 3. Observability (Loggregator Equivalent)
-
-Netflix Atlas-inspired auto-instrumentation using Grafana Beyla (eBPF). Applications get full RED metrics **without any code changes** — like Netflix Spectator auto-injects into JVM apps, but using eBPF for any language.
+### Observability Stack
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -261,27 +298,14 @@ Netflix Atlas-inspired auto-instrumentation using Grafana Beyla (eBPF). Applicat
 │       └───────────────────▶│  Promtail  │────────▶│  Grafana  │ │
 │                            └────────────┘         │  + Loki   │ │
 │                                                   └─────┬─────┘ │
-│  Recording Rules (pre-computed RED):                    │       │
-│    microfoundry:http_request_rate:5m                    │       │
-│    microfoundry:http_error_rate:5m              ┌───────▽─────┐ │
-│    microfoundry:http_latency_p50/p95/p99:5m     │AlertManager │ │
-│                                                  └─────────────┘ │
+│  Pre-computed RED Metrics:                              │       │
+│    microfoundry:http_request_rate:5m               ┌────▽──────┐│
+│    microfoundry:http_error_rate:5m                 │AlertManager││
+│    microfoundry:http_latency_p50/p95/p99:5m        └───────────┘│
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**RED Metrics** (Rate, Errors, Duration):
-- **Rate**: requests per second per app
-- **Errors**: 5xx error ratio
-- **Duration**: p50, p95, p99 latency percentiles
-
-**Admin Dashboard** integrates metrics and logs in a single view:
-- Performance tab: RED stat cards + Grafana panels + correlated logs
-- Logs tab: RED metrics banner + historical log query (Loki) + live SSE streaming
-- Alerts: `MFAppHighErrorRate`, `MFAppHighLatency`, `MFAppNoTraffic`, `MFBeylaDown`
-
-### 4. Authentication & Authorization
-
-OIDC-based authentication via **Keycloak** with one-command setup:
+### Authentication & Authorization
 
 ```bash
 mf setup keycloak                # Deploy Keycloak to cluster
@@ -295,207 +319,9 @@ mf setup keycloak-idp \          # Add social login
 - **Social login**: Google, GitHub, Amazon identity providers
 - **Roles**: platform-admin, org-admin, org-member, viewer
 - **Organizations**: Multi-tenant org management with member invitations
-- **Cookie-based sessions** via gorilla/sessions
-- **Optional**: Auth can be disabled entirely for development
-
-### 5. Platform Configuration
-
-The admin dashboard provides UI-based platform configuration:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Admin UI Sidebar                                             │
-│                                                              │
-│ OPERATIONS               SETTINGS                           │
-│  Dashboard               Clusters                           │
-│  Applications            Service Catalog                    │
-│  Services                Registry                           │
-│  Secrets                 Webhooks                           │
-│  Metrics & Alerts        SMTP                               │
-│                          Users & Orgs                       │
-│                          Platform                           │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Settings stored in Kubernetes** (ConfigMap + Secret):
-- **Container Registry** — Harbor/Docker Hub URL, credentials, push toggle
-- **Webhooks** — HTTP event notifications (app.deployed, app.crashed, alert.fired, etc.)
-- **SMTP** — Email notification configuration
-
-### 6. Network & Routing
-
-- **Ingress Controller**: Pluggable (Kong, Nginx, CSP-native API gateways)
-- **App routing**: `<app-name>.<domain>` (subdomain per app)
-- **Local dev**: `cf-local.dev` with automatic `/etc/hosts` management
-- **Cloud**: Real FQDN with DNS and TLS when deploying to EKS/GKE/AKS
-- **Service networking**: K8s ClusterIP services for backing services, credentials injected via VCAP_SERVICES
-
-### 7. Secret Management
-
-```bash
-$ mf secrets                           # List all secrets
-$ mf create-secret api-keys key=val    # Create user secret
-$ mf secret my-db                      # Show service credentials
-$ mf secret my-db --reveal             # Reveal actual values
-```
-
-Two secret types:
-- **Service secrets** (`mf-svc-*`): Auto-created when provisioning backing services
-- **User secrets** (`mf-secret-*`): Developer-managed key-value pairs
-
-### 8. AI-Native Platform (MCP + Agent)
-
-MicroFoundry exposes itself as a [Model Context Protocol](https://modelcontextprotocol.io/) server, enabling AI tools to be first-class platform operators. AI assistants can push code, bind services, check logs, scale instances, and manage routes — all without leaving the AI-powered workflow.
-
----
-
-## Admin Web Dashboard
-
-The built-in admin dashboard (`mf admin`, default `:8080`) provides:
-
-- **Application management**: Deploy, scale, delete, view instances with 6-tab detail view (Overview, Instances, Config, Services, Routes, Logs/Performance)
-- **Service catalog browser**: Browse and provision services by category with plan visibility control
-- **Real-time metrics**: RED metrics per app with Grafana panel integration
-- **Log viewer**: Historical query (Loki) + live SSE streaming
-- **Multi-cluster management**: Add, remove, switch clusters with health monitoring
-- **Secret management**: View and manage secrets (with reveal toggle)
-- **Platform settings**: Registry, Webhooks, SMTP configuration via UI
-- **Authentication**: Keycloak OIDC login with org management
-- **Topology visualization**: Terraform topology editor for service plans
-- **40+ API endpoints**: Full JSON API for programmatic access
-
-See [docs/admin-guide.md](docs/admin-guide.md) for the complete dashboard guide.
-
----
-
-## Project Structure
-
-```
-microfoundry/
-├── cmd/mf/                    # CLI entry points (20+ commands)
-│   ├── main.go                #   root command + version
-│   ├── push.go                #   mf push (build → registry → deploy → ingress → hosts)
-│   ├── apps.go                #   mf apps / mf app
-│   ├── logs.go                #   mf logs (stream + history)
-│   ├── scale.go               #   mf scale
-│   ├── delete.go              #   mf delete
-│   ├── catalog.go             #   mf catalog (marketplace)
-│   ├── create_service.go      #   mf create-service
-│   ├── services.go            #   mf services / mf service
-│   ├── bind_service.go        #   mf bind-service
-│   ├── unbind_service.go      #   mf unbind-service
-│   ├── delete_service.go      #   mf delete-service
-│   ├── secrets.go             #   mf secrets / mf create-secret / mf delete-secret
-│   ├── admin.go               #   mf admin (web dashboard + auth init)
-│   └── setup.go               #   mf setup keycloak / keycloak-realm / keycloak-idp
-│
-├── pkg/                       # Go packages
-│   ├── admin/                 #   Web dashboard + API handlers (60+ routes)
-│   │   ├── server.go          #     HTTP server, route registration, auth middleware
-│   │   ├── handlers.go        #     App detail, dashboard, tab routing
-│   │   ├── api.go             #     JSON API endpoints
-│   │   ├── performance_handlers.go  # RED metrics + observability
-│   │   ├── service_handlers.go      # Service management UI
-│   │   ├── cluster_handlers.go      # Multi-cluster management
-│   │   ├── monitoring_handlers.go   # Alert & monitoring UI
-│   │   ├── secret_handlers.go       # Secret management UI
-│   │   ├── settings_handlers.go     # Registry, webhooks, SMTP config
-│   │   ├── topology_handlers.go     # Terraform topology editor
-│   │   ├── logs.go            #     SSE log streaming
-│   │   ├── templates.go       #     Template renderer (clone pattern)
-│   │   └── static/            #     Embedded HTML/CSS/JS templates
-│   │       ├── templates/     #       18+ page templates
-│   │       │   ├── partials/  #       Shared partials (nav, etc.)
-│   │       │   └── tabs/      #       HTMX tab partials (8 tabs)
-│   │       └── css/           #       Tailwind CSS
-│   ├── auth/                  #   OIDC + Keycloak + sessions + orgs
-│   │   ├── oidc.go            #     Authorization code flow with PKCE
-│   │   ├── session.go         #     Cookie-based session management
-│   │   ├── keycloak.go        #     Realm/client/IdP configuration
-│   │   ├── org.go             #     Organization & member management
-│   │   └── middleware.go      #     InjectUser middleware
-│   ├── build/                 #   Source-to-image (Dockerfile + CNB + registry push)
-│   ├── config/                #   Multi-cluster configuration (Viper + YAML)
-│   ├── hosts/                 #   /etc/hosts management
-│   ├── k8s/                   #   Kubernetes client + operations
-│   │   ├── client.go          #     K8s API client wrapper
-│   │   ├── app.go             #     Deployment/Service/Pod management
-│   │   ├── ingress.go         #     Ingress route management
-│   │   ├── manager.go         #     Multi-cluster ClientManager
-│   │   ├── registry.go        #     imagePullSecret management
-│   │   └── keycloak.go        #     Keycloak K8s deployment
-│   ├── manifest/              #   CF manifest.yml parser
-│   ├── models/                #   Core data models
-│   │   ├── app.go             #     App, AppDetail, AppListItem, InstanceStatus
-│   │   ├── service.go         #     ServiceType, ServicePlan, ServiceInstance
-│   │   ├── cluster.go         #     ClusterInfo, ClusterDetail, NodeInfo
-│   │   └── settings.go        #     RegistryConfig, WebhookConfig, SMTPConfig
-│   ├── monitoring/            #   Observability stack integration
-│   │   ├── prometheus.go      #     Prometheus query client (RED metrics)
-│   │   ├── grafana.go         #     Grafana dashboard URL builder
-│   │   ├── loki.go            #     Log aggregation client
-│   │   ├── alertmanager.go    #     Alert management client
-│   │   ├── metrics.go         #     Custom Prometheus metrics
-│   │   ├── collector.go       #     Background metrics collection (30s interval)
-│   │   └── middleware.go      #     HTTP metrics middleware
-│   ├── secrets/               #   K8s Secret management
-│   ├── service/               #   Service broker + catalog + provisioning
-│   │   ├── catalog.go         #     10 service types, 3 plans each
-│   │   ├── manager.go         #     Lifecycle management
-│   │   ├── provisioner.go     #     K8s-native provisioning
-│   │   ├── binder.go          #     VCAP_SERVICES injection
-│   │   ├── vcap.go            #     VCAP_SERVICES formatting
-│   │   └── visibility.go      #     Plan visibility toggle (ConfigMap-backed)
-│   ├── settings/              #   Platform settings (ConfigMap/Secret store)
-│   └── terraform/             #   Terraform topology management
-│
-├── deploy/
-│   ├── k8s/                   # Kubernetes manifests
-│   │   ├── base/              #   Base manifests (namespace)
-│   │   └── overlays/          #   Kustomize overlays (local, EKS, GKE, AKS)
-│   └── monitoring/            # Observability stack
-│       ├── install.sh         #   One-command monitoring setup (6 steps)
-│       ├── beyla-config.yaml  #   Beyla eBPF DaemonSet + RBAC + NetworkPolicy
-│       ├── prometheus-recording-rules.yaml  # RED recording rules
-│       ├── kube-prometheus-values.yaml      # Prometheus Helm values
-│       ├── loki-values.yaml                 # Loki + Promtail config
-│       ├── dashboards/        #   Grafana dashboards (overview, cluster, app-detail)
-│       └── alerts/            #   Prometheus alerting rules
-│
-├── configs/mf.example.yaml   # Example configuration
-├── docs/                      # Documentation
-│   ├── user-manual.md         #   Complete user guide
-│   ├── architecture.md        #   Technical architecture
-│   ├── admin-guide.md         #   Admin dashboard guide
-│   ├── cloudfoundry-architecture.md  # CF reference architecture
-│   └── observability-capacity.md     # Monitoring stack docs
-├── Makefile                   # Build targets
-├── Dockerfile                 # Container build
-├── CLAUDE.md                  # Agent workflow rules + branch strategy
-└── LICENSE
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| **Language** | Go 1.25 | API server, CLI, MCP server, all controllers |
-| **CLI Framework** | Cobra + Viper | Command parsing + configuration |
-| **Runtime** | Kubernetes | Application scheduling and orchestration |
-| **Build** | Cloud Native Buildpacks (Paketo) | Source-to-container builds |
-| **Ingress** | Kong / Nginx | API gateway and routing |
-| **Metrics** | Prometheus + Grafana | Metrics collection and visualization |
-| **Logs** | Promtail + Loki | Log aggregation and querying |
-| **Auto-Instrumentation** | Grafana Beyla (eBPF) | Zero-code HTTP metrics |
-| **Alerting** | AlertManager | Alert routing and notification |
-| **Authentication** | Keycloak + coreos/go-oidc | OIDC authorization code flow |
-| **Sessions** | gorilla/sessions | Cookie-based session management |
-| **UI** | Go templates + HTMX + Tailwind CSS | Server-side rendering, no JS build step |
-| **IaC** | Terraform | Cloud resource provisioning |
-| **AI Integration** | Model Context Protocol (MCP) | AI tool platform access |
-| **K8s Client** | client-go | Kubernetes API interactions |
+- **OPA Authorization**: Embedded Open Policy Agent with Rego policies
+- **SCIM v2**: Standard identity provisioning endpoints (RFC 7643/7644)
+- **Audit Log**: In-memory ring buffer with resource/action/decision tracking
 
 ---
 
@@ -542,15 +368,9 @@ mf setup keycloak-realm --url http://localhost:8180
 
 ### Configuration
 
-Copy and edit the example config:
-
 ```bash
 cp configs/mf.example.yaml configs/mf.yaml
-# or for user-wide:
-cp configs/mf.example.yaml ~/.mf/mf.yaml
 ```
-
-Multi-cluster configuration:
 
 ```yaml
 kubernetes:
@@ -570,15 +390,293 @@ kubernetes:
 
 ---
 
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Language** | Go 1.25 | API server, CLI, MCP server, all controllers |
+| **CLI** | Cobra + Viper | Command parsing + configuration |
+| **Runtime** | Kubernetes | Application scheduling and orchestration |
+| **Build** | Cloud Native Buildpacks (Paketo) | Source-to-container builds |
+| **Ingress** | Kong / Nginx | API gateway and routing |
+| **Metrics** | Prometheus + Grafana | Collection and visualization |
+| **Logs** | Promtail + Loki | Aggregation and querying |
+| **Auto-Instrumentation** | Grafana Beyla (eBPF) | Zero-code HTTP metrics |
+| **Alerting** | AlertManager | Alert routing and notification |
+| **Authentication** | Keycloak + go-oidc | OIDC authorization code flow |
+| **Authorization** | Open Policy Agent (OPA) | Rego-based policy evaluation |
+| **Provisioning** | SCIM v2 | Standard identity provisioning |
+| **Sessions** | gorilla/sessions | Cookie-based session management |
+| **UI** | Go templates + HTMX + Tailwind CSS | Server-side rendering, no JS build step |
+| **IaC** | Terraform | Cloud resource topology management |
+| **AI** | Model Context Protocol (MCP) | AI tool platform access |
+| **K8s Client** | client-go | Kubernetes API interactions |
+
+---
+
+## Project Structure
+
+```
+microfoundry/
+├── cmd/mf/                    # CLI entry points (20+ commands)
+│   ├── main.go                #   root command + version
+│   ├── push.go                #   mf push (build → registry → deploy → ingress → hosts)
+│   ├── apps.go                #   mf apps / mf app
+│   ├── logs.go                #   mf logs (stream + history)
+│   ├── scale.go               #   mf scale
+│   ├── delete.go              #   mf delete
+│   ├── catalog.go             #   mf catalog (marketplace)
+│   ├── create_service.go      #   mf create-service
+│   ├── services.go            #   mf services / mf service
+│   ├── bind_service.go        #   mf bind-service
+│   ├── unbind_service.go      #   mf unbind-service
+│   ├── delete_service.go      #   mf delete-service
+│   ├── secrets.go             #   mf secrets / mf create-secret / mf delete-secret
+│   ├── admin.go               #   mf admin (web dashboard + auth + OPA init)
+│   └── setup.go               #   mf setup keycloak / keycloak-realm / keycloak-idp
+│
+├── pkg/                       # Go packages
+│   ├── admin/                 #   Web dashboard + API handlers (100+ routes)
+│   │   ├── server.go          #     HTTP server, route registration, auth/OPA middleware
+│   │   ├── handlers.go        #     App detail, dashboard, tab routing
+│   │   ├── api.go             #     JSON API endpoints
+│   │   ├── scim_handlers.go   #     SCIM v2 endpoints (RFC 7643/7644)
+│   │   ├── iam_handlers.go    #     IAM tab + Keycloak user management
+│   │   ├── org_handlers.go    #     Organization + member management
+│   │   ├── performance_handlers.go  # RED metrics + observability
+│   │   ├── service_handlers.go      # Service management UI
+│   │   ├── cluster_handlers.go      # Multi-cluster management
+│   │   ├── monitoring_handlers.go   # Alert & monitoring UI
+│   │   ├── secret_handlers.go       # Secret management UI
+│   │   ├── settings_handlers.go     # Registry, webhooks, SMTP config
+│   │   ├── topology_handlers.go     # Terraform topology editor
+│   │   ├── logs.go            #     SSE log streaming
+│   │   ├── templates.go       #     Template renderer (clone pattern)
+│   │   └── static/            #     Embedded HTML/CSS/JS templates
+│   │       ├── templates/     #       20+ page templates
+│   │       │   ├── partials/  #       Shared partials (nav, header)
+│   │       │   └── tabs/      #       HTMX tab partials (12 tabs)
+│   │       └── css/           #       Tailwind CSS
+│   ├── auth/                  #   Authentication & Authorization
+│   │   ├── oidc.go            #     OIDC authorization code flow with PKCE
+│   │   ├── session.go         #     Cookie-based session management
+│   │   ├── keycloak.go        #     Realm/client/IdP setup
+│   │   ├── keycloak_admin.go  #     Keycloak Admin REST API client (user CRUD)
+│   │   ├── scim.go            #     SCIM v2 types + Keycloak conversion
+│   │   ├── opa.go             #     Embedded OPA engine (Rego evaluation)
+│   │   ├── opa_middleware.go  #     OPA HTTP middleware + route classification
+│   │   ├── audit.go           #     Authorization audit log (ring buffer)
+│   │   ├── org.go             #     Organization & member management
+│   │   ├── middleware.go      #     InjectUser middleware
+│   │   ├── config.go          #     Auth configuration types
+│   │   └── policies/          #     Embedded Rego policies
+│   │       └── authz.rego     #       Default authorization policy
+│   ├── build/                 #   Source-to-image (Dockerfile + CNB + registry push)
+│   ├── config/                #   Multi-cluster configuration (Viper + YAML)
+│   ├── hosts/                 #   /etc/hosts management
+│   ├── k8s/                   #   Kubernetes client + operations
+│   │   ├── client.go          #     K8s API client wrapper
+│   │   ├── app.go             #     Deployment/Service/Pod management
+│   │   ├── ingress.go         #     Ingress route management
+│   │   ├── manager.go         #     Multi-cluster ClientManager
+│   │   ├── registry.go        #     imagePullSecret management
+│   │   └── keycloak.go        #     Keycloak K8s deployment
+│   ├── manifest/              #   CF manifest.yml parser
+│   ├── models/                #   Core data models
+│   ├── monitoring/            #   Observability stack integration
+│   │   ├── prometheus.go      #     Prometheus query client (RED metrics)
+│   │   ├── grafana.go         #     Grafana dashboard URL builder
+│   │   ├── loki.go            #     Log aggregation client
+│   │   ├── alertmanager.go    #     Alert management client
+│   │   ├── metrics.go         #     Custom Prometheus metrics
+│   │   ├── collector.go       #     Background metrics collection (30s)
+│   │   └── middleware.go      #     HTTP metrics middleware
+│   ├── secrets/               #   K8s Secret management
+│   ├── service/               #   Service broker + catalog + provisioning
+│   │   ├── catalog.go         #     10 service types, 3 plans each
+│   │   ├── provisioner.go     #     K8s-native provisioning (StatefulSet, PVC)
+│   │   ├── binder.go          #     VCAP_SERVICES injection
+│   │   └── visibility.go      #     Plan visibility toggle
+│   ├── settings/              #   Platform settings (ConfigMap/Secret store)
+│   └── terraform/             #   Terraform topology management
+│
+├── deploy/
+│   ├── k8s/                   # Kubernetes manifests
+│   │   ├── base/              #   Base manifests (namespace)
+│   │   └── overlays/          #   Kustomize overlays (local, EKS, GKE, AKS)
+│   └── monitoring/            # Observability stack
+│       ├── install.sh         #   One-command monitoring setup
+│       ├── beyla-config.yaml  #   Beyla eBPF DaemonSet
+│       ├── prometheus-recording-rules.yaml
+│       ├── dashboards/        #   Grafana dashboards
+│       └── alerts/            #   Prometheus alerting rules
+│
+├── test/                      # E2E tests (Playwright)
+│   ├── playwright.config.ts   #   Test configuration
+│   ├── e2e/                   #   82 test cases across 8 suites
+│   └── helpers/               #   Test utilities
+│
+├── configs/mf.example.yaml   # Example configuration
+├── docs/                      # Documentation
+│   ├── user-manual.md         #   Complete user guide
+│   ├── architecture.md        #   Technical architecture
+│   ├── admin-guide.md         #   Admin dashboard guide
+│   ├── cloudfoundry-architecture.md  # CF reference
+│   └── observability-capacity.md     # Monitoring docs
+├── Makefile                   # Build targets
+├── Dockerfile                 # Container build
+├── CLAUDE.md                  # Agent workflow rules
+└── LICENSE
+```
+
+---
+
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
 | [User Manual](docs/user-manual.md) | Complete guide to deploying and managing applications |
 | [Architecture](docs/architecture.md) | Technical architecture and component design |
-| [Admin Guide](docs/admin-guide.md) | Admin dashboard pages, API reference |
+| [Admin Guide](docs/admin-guide.md) | Admin dashboard pages, API reference (100+ endpoints) |
 | [CF Architecture](docs/cloudfoundry-architecture.md) | CloudFoundry reference architecture |
 | [Observability](docs/observability-capacity.md) | Monitoring stack documentation |
+
+---
+
+## How We Build: Human-AI Collaborative Development
+
+MicroFoundry is developed through a structured **Human-AI pair programming workflow** using [Claude Code](https://claude.ai/claude-code) (Anthropic's AI coding agent). This isn't casual AI assistance — it's a formalized development process where AI participates in every phase of the software development lifecycle.
+
+### The Workflow
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                    Epic Development Lifecycle                       │
+│                                                                    │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    │
+│  │ Analyzer  │───▶│  Issue   │───▶│  Agent   │───▶│   Plan   │    │
+│  │  Check   │    │ Creation │    │Discussion│    │  Review  │    │
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘    │
+│       │                                                │          │
+│       │  ┌──────────────────────────────────────────────┘          │
+│       │  │                                                        │
+│  ┌────▽──▽───┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
+│  │   Code    │───▶│    PR    │───▶│  Agent   │───▶│  Merge   │  │
+│  │  Implement│    │ Creation │    │  Review  │    │  to rc   │  │
+│  └───────────┘    └──────────┘    └──────────┘    └──────────┘  │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Each Epic follows this process:**
+
+1. **Analyzer Check** — Verify no open PR dependencies; ensure `rc` branch is clean
+2. **Issue Creation** — Create a GitHub issue with full Epic scope, architecture decisions, and file plan
+3. **Agent Discussion** — 7 specialized agents comment on the issue with their domain expertise
+4. **Plan Review** — Human reviews agent feedback and approves the implementation plan
+5. **Implementation** — Claude Code implements all code changes (typically 10-25 files per Epic)
+6. **PR Creation** — Create a pull request targeting the `rc` branch
+7. **Agent Review** — All 7 agents post review comments on the PR with findings and recommendations
+8. **Merge** — Human reviews and merges to `rc`
+
+### The 7 Agent Personas
+
+Every issue and PR receives comments from 7 specialized agent personas, each bringing domain expertise:
+
+| Agent | Role | Focus Area |
+|-------|------|------------|
+| **Security Architect** | Identifies vulnerabilities, auth gaps, injection risks | OWASP, authentication flows, secrets management, policy bypass |
+| **Platform Engineer** | Reviews reliability, performance, crash safety | Nil guards, error handling, middleware ordering, resource leaks |
+| **API Designer** | Ensures API consistency, spec compliance, contracts | REST conventions, SCIM RFC compliance, pagination, error schemas |
+| **Frontend Engineer** | Reviews UI/UX, template patterns, accessibility | HTMX interactions, Tailwind consistency, error states, responsive design |
+| **DevOps Engineer** | Evaluates deployment safety, observability, CI/CD | Rolling updates, log formats, monitoring integration, build pipeline |
+| **QA Engineer** | Designs test plans, verification matrices, regression checks | Unit/integration/manual test cases, edge cases, acceptance criteria |
+| **Product Manager** | Assesses scope, user impact, prioritization | User stories, release blocking decisions, success metrics, communication |
+
+### Branch Strategy
+
+```
+main (stable release)
+  └── rc (release-candidate, integration branch)
+        ├── epic/feature-a  →  PR targets rc
+        ├── epic/feature-b  →  PR targets rc
+        └── epic/feature-c  →  PR targets rc
+```
+
+- **`main`** — Stable release branch. Only validated `rc` merges into `main`.
+- **`rc`** — Integration branch. All Epic PRs target `rc`.
+- **`epic/*`** — Feature branches created from `rc`. Each is independent.
+
+### Why This Workflow?
+
+This structured process serves several purposes:
+
+- **Quality through diverse perspectives** — Each agent catches issues specific to their domain. Security finds auth bypasses, QA designs test matrices, DevOps flags deployment risks — simultaneously.
+- **Documented decision trail** — Every architectural decision, trade-off, and review finding is captured in GitHub issues and PR comments, creating a permanent knowledge base.
+- **Consistent velocity** — Epics averaging 15-25 files are implemented, reviewed, and merged in single sessions with comprehensive coverage.
+- **Human oversight** — The human developer ([@younjinjeong](https://github.com/younjinjeong)) reviews all agent feedback, approves plans, and makes final merge decisions. AI proposes; human disposes.
+
+---
+
+## Development History
+
+MicroFoundry has been built incrementally through a series of Epics, each adding a major capability:
+
+| PR | Epic | Description | Files |
+|----|------|-------------|-------|
+| [#2](https://github.com/younjinjeong/microfoundry/pull/2) | Local K8s Runtime | `mf push`, `mf apps`, `mf logs`, `mf scale`, `mf delete` — core CLI | — |
+| [#4](https://github.com/younjinjeong/microfoundry/pull/4) | Admin Dashboard | Web admin interface with HTMX, dashboard, app management | — |
+| [#6](https://github.com/younjinjeong/microfoundry/pull/6) | App Detail View | 8-tab application detail view (Overview → Performance) | — |
+| [#8](https://github.com/younjinjeong/microfoundry/pull/8) | Multi-Cluster | Multi-cluster Kubernetes management with ClientManager | — |
+| [#10](https://github.com/younjinjeong/microfoundry/pull/10) | Backing Services | Service catalog, provisioning, binding, VCAP_SERVICES | — |
+| [#11](https://github.com/younjinjeong/microfoundry/pull/11) | Real K8s Provisioning | StatefulSet + PVC provisioning for all 10 service types | — |
+| [#13](https://github.com/younjinjeong/microfoundry/pull/13) | Terraform Topologies | Terraform-based service topology management | — |
+| [#15](https://github.com/younjinjeong/microfoundry/pull/15) | Catalog & Visibility | Service catalog browser with plan visibility controls | — |
+| [#17](https://github.com/younjinjeong/microfoundry/pull/17) | Monitoring & Logging | Prometheus + Loki + Grafana + AlertManager integration | — |
+| [#20](https://github.com/younjinjeong/microfoundry/pull/20) | Beyla eBPF | Netflix Atlas-inspired auto-instrumentation with Beyla | — |
+| [#22](https://github.com/younjinjeong/microfoundry/pull/22) | Observability Hardening | Security, resilience & capacity for monitoring stack | — |
+| [#24](https://github.com/younjinjeong/microfoundry/pull/24) | Platform Config | Registry, webhooks, SMTP settings via admin UI | — |
+| [#26](https://github.com/younjinjeong/microfoundry/pull/26) | Keycloak UAA | OIDC authentication with Keycloak, sessions, org management | — |
+| [#31](https://github.com/younjinjeong/microfoundry/pull/31) | E2E Testing | Playwright E2E test suite (82 test cases, 8 suites) | — |
+| [#34](https://github.com/younjinjeong/microfoundry/pull/34) | IAM & SCIM | Keycloak user CRUD, SCIM v2, OPA authorization, audit log | 22 |
+
+### External Contributions
+
+| PR | Author | Description |
+|----|--------|-------------|
+| [#29](https://github.com/younjinjeong/microfoundry/pull/29) | [@byunjuneseok](https://github.com/byunjuneseok) | Fix: add EnsureNamespace to create-service command |
+
+---
+
+## Contributing
+
+Contributions are welcome! Here's how the project operates:
+
+### For Human Contributors
+
+1. Fork the repository
+2. Create a feature branch from `rc` (not `main`)
+3. Make your changes
+4. Submit a PR targeting `rc`
+5. The maintainer will review with agent assistance
+
+### For AI-Assisted Development
+
+This project uses Claude Code with a defined workflow in [CLAUDE.md](CLAUDE.md). If you're experimenting with AI-assisted development:
+
+1. The agent workflow rules in `CLAUDE.md` define branch strategy and conventions
+2. Each Epic follows the Analyzer → Issue → Discussion → Plan → Implement → PR → Review cycle
+3. 7 agent personas provide structured feedback on issues and PRs
+4. All changes must pass `go build ./...` and `go vet ./...`
+
+### Build & Verify
+
+```bash
+go build ./...          # Must pass
+go vet ./...            # Must pass
+go test ./...           # Run tests
+make e2e                # Run Playwright E2E tests
+```
 
 ---
 
