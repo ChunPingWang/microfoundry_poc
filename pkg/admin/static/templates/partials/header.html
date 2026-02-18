@@ -12,19 +12,40 @@
         {{end}}
         {{if .User}}
         <div class="flex items-center space-x-3 border-l border-gray-200 pl-4">
-            <div class="h-8 w-8 rounded-full bg-gray-900 flex items-center justify-center text-sm font-medium text-white">
+            <div class="h-8 w-8 rounded-full bg-gray-900 flex items-center justify-center text-sm font-medium text-white uppercase"
+                 data-tooltip="Signed in as {{.User.Email}}">
                 {{slice .User.Email 0 1}}
             </div>
             <div class="text-sm">
-                <div class="font-medium text-gray-700">{{.User.Name}}</div>
+                <div class="flex items-center space-x-2">
+                    <span class="font-medium text-gray-700">{{.User.Name}}</span>
+                    {{if hasRole .User.Roles "platform-admin"}}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">admin</span>
+                    {{else if hasRole .User.Roles "workspace-admin"}}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">ws-admin</span>
+                    {{else if hasRole .User.Roles "org-admin"}}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">org-admin</span>
+                    {{else if hasRole .User.Roles "org-member"}}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">member</span>
+                    {{else if hasRole .User.Roles "viewer"}}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">viewer</span>
+                    {{end}}
+                </div>
                 <div class="text-xs text-gray-400">{{.User.Email}}</div>
             </div>
-            <a href="/auth/logout" class="text-xs text-gray-500 hover:text-red-600 ml-2" data-tooltip="Sign out of MicroFoundry">
+            <a href="/auth/logout" class="ml-2 p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" data-tooltip="Sign out">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                 </svg>
             </a>
         </div>
+        {{else if .AuthEnabled}}
+        <a href="/auth/login" class="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+            </svg>
+            <span>Sign In</span>
+        </a>
         {{end}}
     </div>
 </header>

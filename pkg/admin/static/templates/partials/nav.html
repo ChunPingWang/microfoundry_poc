@@ -52,27 +52,15 @@
             Secrets
         </a>
 
-        <!-- Workspaces (platform-admin + workspace-admin) -->
-        {{if and .User (or (hasRole .User.Roles "platform-admin") (hasRole .User.Roles "workspace-admin"))}}
-        <a href="/workspaces"
-           data-tooltip="Manage workspaces (company-level groupings of organizations)" data-tooltip-pos="right"
-           class="flex items-center px-3 py-2 rounded-md text-sm font-medium {{if eq .Active "workspaces"}}bg-gray-800 text-white{{else}}hover:bg-gray-800 hover:text-white{{end}}">
-            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-            </svg>
-            Workspaces
-        </a>
-        {{end}}
-
-        <!-- Users & Orgs (platform-admin + workspace-admin + org-admin) -->
-        {{if and .User (or (hasRole .User.Roles "platform-admin") (hasRole .User.Roles "workspace-admin") (hasRole .User.Roles "org-admin"))}}
+        <!-- IAM in Operations: workspace-admin and org-admin (scoped to their workspace/org) -->
+        {{if and .User (and (not (hasRole .User.Roles "platform-admin")) (or (hasRole .User.Roles "workspace-admin") (hasRole .User.Roles "org-admin")))}}
         <a href="/users"
-           data-tooltip="Manage organizations, users, roles, and authorization policies" data-tooltip-pos="right"
+           data-tooltip="Manage your workspaces, organizations, members, and roles" data-tooltip-pos="right"
            class="flex items-center px-3 py-2 rounded-md text-sm font-medium {{if eq .Active "users"}}bg-gray-800 text-white{{else}}hover:bg-gray-800 hover:text-white{{end}}">
             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
             </svg>
-            Users & Orgs
+            IAM
         </a>
         {{end}}
 
@@ -81,6 +69,14 @@
         <div class="px-3 pt-5 pb-1">
             <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Settings</span>
         </div>
+        <a href="/users"
+           data-tooltip="Platform-wide management: workspaces, organizations, users, roles, and policies" data-tooltip-pos="right"
+           class="flex items-center px-3 py-2 rounded-md text-sm font-medium {{if eq .Active "users"}}bg-gray-800 text-white{{else}}hover:bg-gray-800 hover:text-white{{end}}">
+            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+            Users & Orgs
+        </a>
         <a href="/clusters"
            data-tooltip="Register and manage Kubernetes clusters" data-tooltip-pos="right"
            class="flex items-center px-3 py-2 rounded-md text-sm font-medium {{if eq .Active "clusters"}}bg-gray-800 text-white{{else}}hover:bg-gray-800 hover:text-white{{end}}">

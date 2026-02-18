@@ -76,6 +76,14 @@ func (kc *KeycloakConfigurator) ConfigureRealm(adminUser, adminPass, clientSecre
 		// Realm already exists — continue
 	}
 
+	// Derive wildcard redirect URI for logout flows (e.g. /auth/callback → /*)
+	baseURI := redirectURI
+	if idx := strings.LastIndex(redirectURI, "/auth/"); idx > 0 {
+		baseURI = redirectURI[:idx] + "/*"
+	} else if idx := strings.LastIndex(redirectURI, "/"); idx > 0 {
+		baseURI = redirectURI[:idx] + "/*"
+	}
+
 	// Create client (with service account for admin API access)
 	client := map[string]any{
 		"clientId":                  "mf-admin",
@@ -87,10 +95,11 @@ func (kc *KeycloakConfigurator) ConfigureRealm(adminUser, adminPass, clientSecre
 		"standardFlowEnabled":       true,
 		"directAccessGrantsEnabled": true,
 		"serviceAccountsEnabled":    true,
-		"redirectUris":              []string{redirectURI},
+		"redirectUris":              []string{baseURI},
 		"webOrigins":                []string{"*"},
 		"attributes": map[string]string{
-			"pkce.code.challenge.method": "S256",
+			"pkce.code.challenge.method":  "S256",
+			"post.logout.redirect.uris":  baseURI,
 		},
 	}
 	if err := kc.post(token, "/admin/realms/microfoundry/clients", client); err != nil {
@@ -114,6 +123,9 @@ func (kc *KeycloakConfigurator) ConfigureRealm(adminUser, adminPass, clientSecre
 			}
 		}
 	}
+
+	// Enable realm_access.roles in ID token (required for OIDC role detection)
+	kc.enableRealmRolesInIDToken(token)
 
 	return nil
 }
@@ -237,6 +249,70 @@ func (kc *KeycloakConfigurator) getJSONArray(token, path string) []map[string]an
 	var arr []map[string]any
 	json.NewDecoder(resp.Body).Decode(&arr)
 	return arr
+}
+
+// enableRealmRolesInIDToken finds the "roles" client scope's "realm roles" mapper
+// and sets id.token.claim=true so realm_access.roles appears in the ID token.
+func (kc *KeycloakConfigurator) enableRealmRolesInIDToken(token string) {
+	// Find the "roles" client scope
+	scopes := kc.getJSONArray(token, "/admin/realms/microfoundry/client-scopes")
+	var scopeID string
+	for _, s := range scopes {
+		if name, _ := s["name"].(string); name == "roles" {
+			if id, _ := s["id"].(string); id != "" {
+				scopeID = id
+				break
+			}
+		}
+	}
+	if scopeID == "" {
+		return
+	}
+
+	// Find the "realm roles" mapper within the scope
+	mappers := kc.getJSONArray(token, fmt.Sprintf("/admin/realms/microfoundry/client-scopes/%s/protocol-mappers/models", scopeID))
+	for _, m := range mappers {
+		name, _ := m["name"].(string)
+		if name != "realm roles" {
+			continue
+		}
+		mapperID, _ := m["id"].(string)
+		if mapperID == "" {
+			continue
+		}
+		// Update config to include id.token.claim
+		cfg, _ := m["config"].(map[string]any)
+		if cfg == nil {
+			cfg = map[string]any{}
+		}
+		cfg["id.token.claim"] = "true"
+		m["config"] = cfg
+		_ = kc.put(token, fmt.Sprintf("/admin/realms/microfoundry/client-scopes/%s/protocol-mappers/models/%s", scopeID, mapperID), m)
+		return
+	}
+}
+
+func (kc *KeycloakConfigurator) put(token, path string, body any) error {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("PUT", kc.baseURL+path, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := kc.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("keycloak API error (%d): %s", resp.StatusCode, respBody)
+	}
+	return nil
 }
 
 func (kc *KeycloakConfigurator) post(token, path string, body any) error {

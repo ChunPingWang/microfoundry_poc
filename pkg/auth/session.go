@@ -56,12 +56,21 @@ func NewSessionManager(hexKey string) *SessionManager {
 	return &SessionManager{store: store}
 }
 
+// getSession returns the session, ignoring decode errors from stale cookies.
+// gorilla/sessions always returns a usable (possibly new) session even on error.
+func (sm *SessionManager) getSession(r *http.Request) *sessions.Session {
+	session, _ := sm.store.Get(r, sessionName)
+	if session == nil {
+		session = sessions.NewSession(sm.store, sessionName)
+		session.Options = sm.store.Options
+		session.IsNew = true
+	}
+	return session
+}
+
 // GetUser extracts the authenticated user from the session cookie.
 func (sm *SessionManager) GetUser(r *http.Request) (*UserSession, error) {
-	session, err := sm.store.Get(r, sessionName)
-	if err != nil {
-		return nil, err
-	}
+	session := sm.getSession(r)
 
 	data, ok := session.Values["user"].([]byte)
 	if !ok {
@@ -80,10 +89,7 @@ func (sm *SessionManager) GetUser(r *http.Request) (*UserSession, error) {
 
 // SetUser stores the user session in the cookie.
 func (sm *SessionManager) SetUser(w http.ResponseWriter, r *http.Request, user *UserSession) error {
-	session, err := sm.store.Get(r, sessionName)
-	if err != nil {
-		return err
-	}
+	session := sm.getSession(r)
 
 	data, err := json.Marshal(user)
 	if err != nil {
@@ -96,10 +102,7 @@ func (sm *SessionManager) SetUser(w http.ResponseWriter, r *http.Request, user *
 
 // SetOAuthState stores the OIDC state and PKCE verifier in the session.
 func (sm *SessionManager) SetOAuthState(w http.ResponseWriter, r *http.Request, state, verifier string) error {
-	session, err := sm.store.Get(r, sessionName)
-	if err != nil {
-		return err
-	}
+	session := sm.getSession(r)
 	session.Values["oauth_state"] = state
 	session.Values["pkce_verifier"] = verifier
 	return session.Save(r, w)
@@ -107,10 +110,7 @@ func (sm *SessionManager) SetOAuthState(w http.ResponseWriter, r *http.Request, 
 
 // GetOAuthState retrieves and clears the OIDC state and PKCE verifier.
 func (sm *SessionManager) GetOAuthState(r *http.Request) (state, verifier string) {
-	session, err := sm.store.Get(r, sessionName)
-	if err != nil {
-		return "", ""
-	}
+	session := sm.getSession(r)
 	s, _ := session.Values["oauth_state"].(string)
 	v, _ := session.Values["pkce_verifier"].(string)
 	return s, v
@@ -138,10 +138,7 @@ func (sm *SessionManager) SetActiveOrg(w http.ResponseWriter, r *http.Request, o
 
 // Clear destroys the session.
 func (sm *SessionManager) Clear(w http.ResponseWriter, r *http.Request) error {
-	session, err := sm.store.Get(r, sessionName)
-	if err != nil {
-		return err
-	}
+	session := sm.getSession(r)
 	session.Options.MaxAge = -1
 	return session.Save(r, w)
 }
