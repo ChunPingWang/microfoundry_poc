@@ -1,0 +1,70 @@
+# MicroFoundry Configuration -- Azure AKS
+#
+# Copy this file and customize for your environment:
+#   cp mf.example.yaml mf.yaml
+#
+# This configuration is designed for Azure Kubernetes Service deployments.
+# Monitoring URLs are left empty because Azure Monitor / Log Analytics
+# replaces the in-cluster Prometheus + Loki + Grafana stack.
+
+github:
+  owner: "your-github-org"
+  repo: "your-repo"
+
+kubernetes:
+  active: "aks"
+  clusters:
+    aks:
+      name: "aks"
+      context: "aks"
+      namespace: "microfoundry"
+      domain: "apps.example.com"        # Replace with your domain
+      provider: "aks"
+      enabled: true
+      ingress_class: "azure/application-gateway"
+    # Example: Add a second AKS cluster for staging
+    # aks-staging:
+    #   name: "aks-staging"
+    #   context: "aks-staging"
+    #   namespace: "microfoundry"
+    #   domain: "staging.example.com"
+    #   provider: "aks"
+    #   enabled: true
+    #   ingress_class: "azure/application-gateway"
+
+admin:
+  port: 8080
+  host: "0.0.0.0"
+  domain: "admin.apps.example.com"      # Replace with your admin domain
+  tls: true
+
+monitoring:
+  # Azure Monitor replaces in-cluster monitoring.
+  # Leave URLs empty; MicroFoundry detects the AKS provider and defers
+  # to Azure Monitor / Log Analytics for observability.
+  grafana_url: ""
+  loki_url: ""
+  alertmanager_url: ""
+  prometheus_url: ""
+  beyla_enabled: false
+
+# Container registry -- ACR integration is handled by AKS role assignment;
+# set these only if you use a non-ACR registry.
+# registry:
+#   url: "acrmicrofoundry.azurecr.io"
+#   project: "microfoundry"
+#   username: ""
+#   insecure: false
+
+# Authentication (Keycloak OIDC) -- uncomment and configure after deployment
+# auth:
+#   enabled: true
+#   issuer_url: "https://keycloak.apps.example.com/realms/microfoundry"
+#   client_id: "mf-admin"
+#   client_secret: "<your-client-secret>"
+#   redirect_url: "https://admin.apps.example.com/auth/callback"
+#   session_key: "<generate-with-openssl-rand-hex-64>"
+#   admin_base_url: "https://keycloak.apps.example.com"
+#   admin_client_id: "mf-admin"
+#   admin_client_secret: "<your-client-secret>"
+#   realm: "microfoundry"

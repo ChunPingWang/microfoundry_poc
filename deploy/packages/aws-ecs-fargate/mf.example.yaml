@@ -1,0 +1,59 @@
+# -----------------------------------------------------------------------------
+# MicroFoundry Configuration — AWS ECS Fargate + EKS Hybrid Deployment
+# -----------------------------------------------------------------------------
+# This configuration runs the MicroFoundry control plane on ECS Fargate
+# while managing application workloads on a remote EKS cluster.
+#
+# Place this file at /etc/microfoundry/mf.yaml inside the Fargate container
+# (mounted via EFS), or set MF_CONFIG_DIR to point to its directory.
+# -----------------------------------------------------------------------------
+
+github:
+  owner: ""
+  repo: ""
+
+kubernetes:
+  active: "eks"
+  clusters:
+    eks:
+      name: "EKS Workload Cluster"
+      # The EKS context is resolved automatically via IAM role when running on Fargate.
+      # If connecting externally, use: arn:aws:eks:<region>:<account-id>:cluster/<cluster-name>
+      context: ""
+      namespace: "microfoundry"
+      domain: ""          # Set to your domain, e.g. "apps.example.com"
+      provider: "eks"
+      region: "us-east-1"
+      enabled: true
+      tls: false
+      ingress_class: "nginx"
+
+admin:
+  port: 8080
+  host: "0.0.0.0"
+  # domain: "admin.example.com"  # Set after configuring DNS to point to the ALB
+
+# Monitoring — MicroFoundry on Fargate uses CloudWatch for container logs.
+# Prometheus/Grafana/Loki URLs are left empty since they are not deployed
+# alongside the Fargate control plane. If you deploy a monitoring stack on
+# the EKS cluster, fill in the appropriate in-cluster service URLs.
+monitoring:
+  grafana_url: ""
+  loki_url: ""
+  alertmanager_url: ""
+  prometheus_url: ""
+  beyla_enabled: false
+
+# Authentication (Keycloak OIDC)
+# Uncomment and configure after deploying Keycloak on the EKS cluster.
+# auth:
+#   enabled: true
+#   issuer_url: "https://keycloak.example.com/realms/microfoundry"
+#   client_id: "mf-admin"
+#   client_secret: ""
+#   redirect_url: "https://admin.example.com/auth/callback"
+#   session_key: ""  # 64-char hex string; auto-generated if empty
+#   admin_base_url: "https://keycloak.example.com"
+#   admin_client_id: "admin-cli"
+#   admin_client_secret: ""
+#   realm: "microfoundry"

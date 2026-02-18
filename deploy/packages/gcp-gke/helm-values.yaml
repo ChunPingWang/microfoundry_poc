@@ -1,0 +1,82 @@
+##############################################################################
+# MicroFoundry — Helm values for GCP GKE
+#
+# This file is consumed as a templatefile() by Terraform.
+# Variables: project_id, gcp_sa_email, domain, static_ip_name, enable_monitoring
+##############################################################################
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/younjinjeong/microfoundry/mf
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: microfoundry
+  annotations:
+    iam.gke.io/gcp-service-account: "${gcp_sa_email}"
+
+rbac:
+  create: true
+
+namespace: microfoundry
+
+config:
+  kubernetes:
+    active: "gke"
+    clusters:
+      gke:
+        name: "gke"
+        context: ""
+        namespace: "microfoundry"
+        domain: "${domain}"
+        provider: "gke"
+        enabled: true
+        ingress_class: "gce"
+  admin:
+    port: 8080
+    host: "0.0.0.0"
+    domain: "admin.${domain}"
+  monitoring:
+    # Cloud Monitoring and Cloud Logging replace self-hosted Prometheus/Grafana/Loki
+    grafana_url: ""
+    loki_url: ""
+    alertmanager_url: ""
+    prometheus_url: ""
+    beyla_enabled: false
+
+auth:
+  enabled: false
+  issuerUrl: ""
+  clientId: "mf-admin"
+  clientSecret: ""
+  redirectUrl: ""
+  sessionKey: ""
+  adminBaseUrl: ""
+  realm: "microfoundry"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "gce"
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "${static_ip_name}"
+  hosts:
+    - host: "admin.${domain}"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

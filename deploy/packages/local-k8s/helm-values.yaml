@@ -1,0 +1,115 @@
+# MicroFoundry Helm Values Override — Local Kubernetes
+# Target environments: Docker Desktop / kind / minikube
+#
+# Usage:
+#   helm install microfoundry oci://ghcr.io/younjinjeong/microfoundry/charts/microfoundry \
+#     -f helm-values.yaml -n microfoundry --create-namespace
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/younjinjeong/microfoundry/mf
+  pullPolicy: IfNotPresent
+  # tag: "" — defaults to Chart appVersion
+
+# ---------------------------------------------------------------------------
+# Namespace
+# ---------------------------------------------------------------------------
+namespace: microfoundry
+
+# ---------------------------------------------------------------------------
+# Service Account & RBAC
+# ---------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: microfoundry
+  annotations: {}
+
+rbac:
+  create: true
+
+# ---------------------------------------------------------------------------
+# MicroFoundry application config
+# ---------------------------------------------------------------------------
+config:
+  github:
+    owner: ""
+    repo: ""
+  kubernetes:
+    active: "docker-desktop"
+    clusters:
+      docker-desktop:
+        name: "docker-desktop"
+        context: "docker-desktop"
+        namespace: microfoundry
+        domain: "cf-local.dev"
+        provider: "docker-desktop"
+        enabled: true
+        ingress_class: "nginx"
+  admin:
+    port: 8080
+    host: "0.0.0.0"
+    domain: "admin.cf-local.dev"
+    tls: false
+  monitoring:
+    # In-cluster service URLs (no external access required)
+    grafana_url: "http://kube-prometheus-grafana.monitoring.svc.cluster.local:80"
+    loki_url: "http://loki.monitoring.svc.cluster.local:3100"
+    alertmanager_url: "http://kube-prometheus-kube-prome-alertmanager.monitoring.svc.cluster.local:9093"
+    prometheus_url: "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090"
+    beyla_enabled: true
+
+# ---------------------------------------------------------------------------
+# Authentication — disabled by default for local development
+# ---------------------------------------------------------------------------
+auth:
+  enabled: false
+  issuerUrl: ""
+  clientId: "mf-admin"
+  clientSecret: ""
+  redirectUrl: ""
+  sessionKey: ""
+  adminBaseUrl: ""
+  realm: "microfoundry"
+
+# ---------------------------------------------------------------------------
+# Service — ClusterIP for local environments (no LoadBalancer needed)
+# ---------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 8080
+
+# ---------------------------------------------------------------------------
+# Ingress — nginx ingress controller
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+  hosts:
+    - host: admin.cf-local.dev
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # To enable TLS, uncomment below and create the secret:
+  #   kubectl create secret tls mf-tls-wildcard --cert=cert.pem --key=key.pem -n microfoundry
+  # tls:
+  #   - secretName: mf-tls-wildcard
+  #     hosts:
+  #       - admin.cf-local.dev
+  #       - "*.cf-local.dev"
+
+# ---------------------------------------------------------------------------
+# Resource limits — conservative for local development
+# ---------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

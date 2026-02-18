@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "microfoundry.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "microfoundry.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "microfoundry.selectorLabels" . | nindent 4 }}

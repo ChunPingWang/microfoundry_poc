@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "microfoundry.fullname" . }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "microfoundry.labels" . | nindent 4 }}
+data:
+  mf.yaml: |
+    github:
+      owner: {{ .Values.config.github.owner | quote }}
+      repo: {{ .Values.config.github.repo | quote }}
+
+    kubernetes:
+      active: {{ .Values.config.kubernetes.active | quote }}
+      clusters:
+        {{- range $name, $cluster := .Values.config.kubernetes.clusters }}
+        {{ $name }}:
+          name: {{ $cluster.name | quote }}
+          context: {{ $cluster.context | quote }}
+          namespace: {{ $cluster.namespace | quote }}
+          domain: {{ $cluster.domain | quote }}
+          provider: {{ $cluster.provider | quote }}
+          enabled: {{ $cluster.enabled }}
+          {{- if $cluster.ingress_class }}
+          ingress_class: {{ $cluster.ingress_class | quote }}
+          {{- end }}
+        {{- end }}
+
+    admin:
+      port: {{ .Values.config.admin.port }}
+      host: {{ .Values.config.admin.host | quote }}
+      {{- if .Values.config.admin.domain }}
+      domain: {{ .Values.config.admin.domain | quote }}
+      {{- end }}
+      {{- if .Values.config.admin.tls }}
+      tls: true
+      {{- end }}
+
+    monitoring:
+      {{- if .Values.config.monitoring.grafana_url }}
+      grafana_url: {{ .Values.config.monitoring.grafana_url | quote }}
+      {{- end }}
+      {{- if .Values.config.monitoring.loki_url }}
+      loki_url: {{ .Values.config.monitoring.loki_url | quote }}
+      {{- end }}
+      {{- if .Values.config.monitoring.alertmanager_url }}
+      alertmanager_url: {{ .Values.config.monitoring.alertmanager_url | quote }}
+      {{- end }}
+      {{- if .Values.config.monitoring.prometheus_url }}
+      prometheus_url: {{ .Values.config.monitoring.prometheus_url | quote }}
+      {{- end }}
+      beyla_enabled: {{ .Values.config.monitoring.beyla_enabled }}
+
+    {{- if .Values.auth.enabled }}
+    auth:
+      enabled: true
+      issuer_url: {{ .Values.auth.issuerUrl | quote }}
+      client_id: {{ .Values.auth.clientId | quote }}
+      redirect_url: {{ .Values.auth.redirectUrl | quote }}
+      {{- if .Values.auth.adminBaseUrl }}
+      admin_base_url: {{ .Values.auth.adminBaseUrl | quote }}
+      admin_client_id: {{ .Values.auth.clientId | quote }}
+      realm: {{ .Values.auth.realm | quote }}
+      {{- end }}
+    {{- end }}

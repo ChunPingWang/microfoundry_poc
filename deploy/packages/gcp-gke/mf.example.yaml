@@ -1,0 +1,51 @@
+##############################################################################
+# MicroFoundry — Example configuration for GCP GKE
+#
+# Copy this file to ~/.mf/mf.yaml and edit the values for your environment.
+##############################################################################
+
+github:
+  owner: "younjinjeong"
+  repo: "microfoundry"
+
+kubernetes:
+  active: "gke"
+  clusters:
+    gke:
+      name: "gke"
+      context: "gke_<PROJECT_ID>_<REGION>_microfoundry-gke"
+      namespace: "microfoundry"
+      domain: "apps.example.com"
+      provider: "gke"
+      enabled: true
+      ingress_class: "gce"
+
+admin:
+  port: 8080
+  host: "0.0.0.0"
+  # domain: "admin.apps.example.com"
+  # tls: true
+
+monitoring:
+  # GKE uses Cloud Monitoring and Cloud Logging by default.
+  # Leave URLs empty to indicate that external observability is handled
+  # by the GCP-native stack rather than self-hosted Prometheus/Grafana/Loki.
+  grafana_url: ""
+  loki_url: ""
+  alertmanager_url: ""
+  prometheus_url: ""
+  beyla_enabled: false
+
+# Authentication (Keycloak OIDC)
+# Uncomment and configure after deploying Keycloak or an external IdP.
+# auth:
+#   enabled: true
+#   issuer_url: "https://auth.apps.example.com/realms/microfoundry"
+#   client_id: "mf-admin"
+#   client_secret: "<your-client-secret>"
+#   redirect_url: "https://admin.apps.example.com/auth/callback"
+#   session_key: ""
+#   admin_base_url: "https://auth.apps.example.com"
+#   admin_client_id: "admin-cli"
+#   admin_client_secret: "<your-admin-secret>"
+#   realm: "microfoundry"

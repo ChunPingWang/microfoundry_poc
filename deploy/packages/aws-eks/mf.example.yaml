@@ -1,0 +1,52 @@
+# -----------------------------------------------------------------------------
+# MicroFoundry Configuration for AWS EKS
+#
+# Copy this file to mf.yaml and adjust values for your environment.
+# This configuration is mounted into the MicroFoundry pod at
+# /etc/microfoundry/mf.yaml via the Helm chart ConfigMap.
+# -----------------------------------------------------------------------------
+
+kubernetes:
+  active: "eks"
+  clusters:
+    eks:
+      name: "microfoundry-eks"
+      context: ""
+      namespace: microfoundry
+      domain: "apps.example.com"
+      provider: "eks"
+      enabled: true
+      ingress_class: "alb"
+
+admin:
+  port: 8080
+  host: "0.0.0.0"
+  domain: "admin.apps.example.com"
+  tls: false
+
+monitoring:
+  # On EKS, CloudWatch Container Insights provides observability.
+  # Self-hosted Grafana/Loki/Prometheus URLs are left empty since the
+  # AWS-native monitoring stack is used instead.
+  grafana_url: ""
+  loki_url: ""
+  alertmanager_url: ""
+  prometheus_url: ""
+  beyla_enabled: false
+
+# ---------------------------------------------------------------------------
+# Authentication (OIDC)
+#
+# Uncomment and configure the section below to enable authentication.
+# This example uses Keycloak as the OIDC provider. You can substitute
+# any OIDC-compatible identity provider (Cognito, Auth0, Okta, etc.).
+# ---------------------------------------------------------------------------
+# auth:
+#   enabled: true
+#   issuer_url: "https://keycloak.example.com/realms/microfoundry"
+#   client_id: "mf-admin"
+#   client_secret: "<your-client-secret>"
+#   redirect_url: "https://admin.apps.example.com/callback"
+#   session_key: "<random-32-byte-hex-string>"
+#   admin_base_url: "https://keycloak.example.com"
+#   realm: "microfoundry"

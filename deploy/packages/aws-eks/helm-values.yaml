@@ -1,0 +1,91 @@
+# -----------------------------------------------------------------------------
+# MicroFoundry - Helm Values for AWS EKS
+#
+# This file is used as a Terraform templatefile. Variables enclosed in
+# ${...} are interpolated by Terraform during deployment. To use this
+# file standalone (without Terraform), replace placeholders manually.
+# -----------------------------------------------------------------------------
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/younjinjeong/microfoundry/mf
+  tag: ""
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: microfoundry
+  annotations:
+    # IRSA: bind the Kubernetes ServiceAccount to an AWS IAM role
+    eks.amazonaws.com/role-arn: "${iam_role_arn}"
+
+rbac:
+  create: true
+
+namespace: microfoundry
+
+config:
+  kubernetes:
+    active: "eks"
+    clusters:
+      eks:
+        name: "${cluster_name}"
+        context: ""
+        namespace: microfoundry
+        domain: "${domain}"
+        provider: "eks"
+        enabled: true
+        ingress_class: "alb"
+  admin:
+    port: 8080
+    host: "0.0.0.0"
+    domain: "admin.${domain}"
+    tls: false
+  monitoring:
+    # CloudWatch Container Insights replaces self-hosted monitoring stack.
+    # Leave these empty when using AWS-native observability.
+    grafana_url: ""
+    loki_url: ""
+    alertmanager_url: ""
+    prometheus_url: ""
+    beyla_enabled: false
+
+auth:
+  enabled: false
+  issuerUrl: ""
+  clientId: "mf-admin"
+  clientSecret: ""
+  redirectUrl: ""
+  sessionKey: ""
+  adminBaseUrl: ""
+  realm: "microfoundry"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/group.name: microfoundry
+  hosts:
+    - host: "admin.${domain}"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

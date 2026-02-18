@@ -1,0 +1,76 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/younjinjeong/microfoundry/mf
+  tag: ""  # Defaults to Chart appVersion
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: microfoundry
+  annotations: {}
+
+rbac:
+  create: true
+
+namespace: microfoundry
+
+config:
+  github:
+    owner: ""
+    repo: ""
+  kubernetes:
+    active: "default"
+    clusters:
+      default:
+        name: "default"
+        context: ""
+        namespace: microfoundry
+        domain: "apps.example.com"
+        provider: "native"
+        enabled: true
+        ingress_class: "nginx"
+  admin:
+    port: 8080
+    host: "0.0.0.0"
+    domain: ""
+    tls: false
+  monitoring:
+    grafana_url: "http://kube-prometheus-grafana.monitoring.svc.cluster.local:80"
+    loki_url: "http://loki.monitoring.svc.cluster.local:3100"
+    alertmanager_url: "http://kube-prometheus-kube-prome-alertmanager.monitoring.svc.cluster.local:9093"
+    prometheus_url: "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090"
+    beyla_enabled: true
+
+auth:
+  enabled: false
+  issuerUrl: ""
+  clientId: "mf-admin"
+  clientSecret: ""
+  redirectUrl: ""
+  sessionKey: ""
+  adminBaseUrl: ""
+  realm: "microfoundry"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: admin.apps.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
