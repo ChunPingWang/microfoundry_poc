@@ -43,6 +43,8 @@ func main() {
 		secretDetailCmd(),
 		createSecretCmd(),
 		deleteSecretCmd(),
+		usersCmd(),
+		orgsCmd(),
 		setupRoot,
 	)
 
