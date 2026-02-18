@@ -37,13 +37,15 @@ func (g *GrafanaConfig) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-// DashboardURL returns an embeddable Grafana solo dashboard URL.
+// DashboardURL returns an embeddable Grafana dashboard URL in kiosk mode.
+// Use PanelURL for embedding individual panels (requires panelId).
 func (g *GrafanaConfig) DashboardURL(uid string, params map[string]string) string {
 	u, _ := url.Parse(g.BaseURL)
-	u.Path = fmt.Sprintf("/d-solo/%s", uid)
+	u.Path = fmt.Sprintf("/d/%s", uid)
 	q := u.Query()
 	q.Set("orgId", "1")
 	q.Set("theme", "light")
+	q.Set("kiosk", "")
 	for k, v := range params {
 		q.Set(k, v)
 	}
