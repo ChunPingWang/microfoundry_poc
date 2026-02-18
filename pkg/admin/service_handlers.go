@@ -52,7 +52,7 @@ func (s *Server) ServicesListHandler(w http.ResponseWriter, r *http.Request) {
 		catalog = []models.ServiceType{}
 	}
 
-	data := s.pageData("Backing Services", "services")
+	data := s.pageDataWithUser(r,"Backing Services", "services")
 	data.Content = map[string]any{
 		"Services": items,
 		"Catalog":  catalog,
@@ -81,7 +81,7 @@ func (s *Server) ServiceDetailHandler(w http.ResponseWriter, r *http.Request) {
 	// Find plan details from catalog
 	plan, _ := service.FindPlan(inst.ServiceType, inst.Plan)
 
-	data := s.pageData(name, "services")
+	data := s.pageDataWithUser(r,name, "services")
 	data.Content = map[string]any{
 		"Instance": inst,
 		"Plan":     plan,
@@ -142,7 +142,7 @@ func (s *Server) CatalogHandler(w http.ResponseWriter, r *http.Request) {
 		items = append(items, pageItem)
 	}
 
-	data := s.pageData("Service Catalog", "catalog")
+	data := s.pageDataWithUser(r,"Service Catalog", "catalog")
 	data.Content = map[string]any{
 		"Items":              items,
 		"TerraformAvailable": terraform.IsAvailable(),

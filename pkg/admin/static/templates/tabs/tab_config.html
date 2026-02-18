@@ -38,26 +38,41 @@
 
     <!-- Resource Limits -->
     <div>
-        <h4 class="text-sm font-medium text-gray-500 mb-3">Resource Limits</h4>
+        <div class="flex items-center justify-between mb-3">
+            <h4 class="text-sm font-medium text-gray-500">Resource Limits</h4>
+            <span class="text-xs text-gray-400">Changing memory or disk will restart the app</span>
+        </div>
         <div class="bg-gray-50 rounded-lg p-4">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                    <p class="text-xs text-gray-500">Memory Request</p>
-                    <p class="text-sm font-medium text-gray-900">{{memFmt .MemoryMB}}</p>
+            <form hx-post="/apps/{{.Name}}/scale" hx-swap="none"
+                  hx-on::after-request="if(event.detail.successful) { document.getElementById('resource-save-ok').classList.remove('hidden'); setTimeout(function(){ document.getElementById('resource-save-ok').classList.add('hidden'); }, 3000); }">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div>
+                        <label for="memory_mb" class="block text-xs text-gray-500 mb-1">Memory (MB)</label>
+                        <input type="number" name="memory_mb" id="memory_mb" value="{{.MemoryMB}}"
+                               min="64" max="8192" step="64"
+                               class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="disk_mb" class="block text-xs text-gray-500 mb-1">Disk (MB)</label>
+                        <input type="number" name="disk_mb" id="disk_mb" value="{{.DiskMB}}"
+                               min="256" max="8192" step="256"
+                               class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500 mb-1">CPU Request</p>
+                        <p class="text-sm font-medium text-gray-900 py-1.5">{{if .CPUMillis}}{{.CPUMillis}}m{{else}}-{{end}}</p>
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit"
+                                class="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            Save Resources
+                        </button>
+                    </div>
                 </div>
-                <div>
-                    <p class="text-xs text-gray-500">Memory Limit</p>
-                    <p class="text-sm font-medium text-gray-900">{{memFmt .MemoryMB}}</p>
+                <div id="resource-save-ok" class="hidden text-sm text-green-600 font-medium">
+                    Resources updated. App is restarting with new limits.
                 </div>
-                <div>
-                    <p class="text-xs text-gray-500">CPU Request</p>
-                    <p class="text-sm font-medium text-gray-900">{{if .CPUMillis}}{{.CPUMillis}}m{{else}}-{{end}}</p>
-                </div>
-                <div>
-                    <p class="text-xs text-gray-500">CPU Limit</p>
-                    <p class="text-sm font-medium text-gray-900">-</p>
-                </div>
-            </div>
+            </form>
         </div>
     </div>
 

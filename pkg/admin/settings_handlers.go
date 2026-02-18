@@ -38,7 +38,7 @@ func (s *Server) RegistrySettingsHandler(w http.ResponseWriter, r *http.Request)
 	ps, _ := store.Get(ctx)
 	hasPwd, _ := store.GetCredential(ctx, "registry-password")
 
-	data := s.pageData("Registry", "settings-registry")
+	data := s.pageDataWithUser(r,"Registry", "settings-registry")
 	data.Content = map[string]any{
 		"Registry":    ps.Registry,
 		"HasPassword": hasPwd != "",
@@ -153,7 +153,7 @@ func (s *Server) WebhooksSettingsHandler(w http.ResponseWriter, r *http.Request)
 
 	ps, _ := store.Get(r.Context())
 
-	data := s.pageData("Webhooks", "settings-webhooks")
+	data := s.pageDataWithUser(r,"Webhooks", "settings-webhooks")
 	data.Content = map[string]any{
 		"Webhooks":   ps.Webhooks,
 		"EventTypes": models.WebhookEventTypes,
@@ -271,7 +271,7 @@ func (s *Server) SMTPSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	ps, _ := store.Get(ctx)
 	hasPwd, _ := store.GetCredential(ctx, "smtp-password")
 
-	data := s.pageData("SMTP", "settings-smtp")
+	data := s.pageDataWithUser(r,"SMTP", "settings-smtp")
 	data.Content = map[string]any{
 		"SMTP":        ps.SMTP,
 		"HasPassword": hasPwd != "",
@@ -478,7 +478,7 @@ func (s *Server) EndpointsSettingsHandler(w http.ResponseWriter, r *http.Request
 	ps, _ := store.Get(ctx)
 	endpoints := client.DiscoverPlatformServices(ctx, client.Domain, ps.Endpoints.Overrides)
 
-	data := s.pageData("Service Endpoints", "settings-endpoints")
+	data := s.pageDataWithUser(r,"Service Endpoints", "settings-endpoints")
 	data.Content = map[string]any{
 		"Endpoints": endpoints,
 		"Domain":    client.Domain,

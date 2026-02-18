@@ -352,6 +352,182 @@ func (s *Server) APIPoliciesHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"policies": s.opa.GetPolicies()})
 }
 
+// APICreateUserHandler handles POST /api/users.
+func (s *Server) APICreateUserHandler(w http.ResponseWriter, r *http.Request) {
+	if s.keycloakAdmin == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "keycloak admin not configured"})
+		return
+	}
+
+	var body struct {
+		Username  string `json:"username"`
+		Email     string `json:"email"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+		Password  string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if body.Username == "" || body.Email == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username and email are required"})
+		return
+	}
+
+	user := &auth.KeycloakUser{
+		Username:      body.Username,
+		Email:         body.Email,
+		FirstName:     body.FirstName,
+		LastName:      body.LastName,
+		Enabled:       true,
+		EmailVerified: true,
+	}
+
+	userID, err := s.keycloakAdmin.CreateUser(r.Context(), user)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if body.Password != "" {
+		if err := s.keycloakAdmin.ResetPassword(r.Context(), userID, body.Password, false); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "user created but password set failed: " + err.Error()})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"id": userID})
+}
+
+// APIDeleteUserHandler handles DELETE /api/users/{id}.
+func (s *Server) APIDeleteUserHandler(w http.ResponseWriter, r *http.Request) {
+	if s.keycloakAdmin == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "keycloak admin not configured"})
+		return
+	}
+
+	userID := r.PathValue("id")
+	if err := s.keycloakAdmin.DeleteUser(r.Context(), userID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// APIToggleUserHandler handles POST /api/users/{id}/toggle.
+func (s *Server) APIToggleUserHandler(w http.ResponseWriter, r *http.Request) {
+	if s.keycloakAdmin == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "keycloak admin not configured"})
+		return
+	}
+
+	userID := r.PathValue("id")
+	user, err := s.keycloakAdmin.GetUser(r.Context(), userID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	user.Enabled = !user.Enabled
+	if err := s.keycloakAdmin.UpdateUser(r.Context(), user); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"id": userID, "enabled": user.Enabled})
+}
+
+// APIAssignRoleHandler handles POST /api/users/{id}/roles.
+func (s *Server) APIAssignRoleHandler(w http.ResponseWriter, r *http.Request) {
+	if s.keycloakAdmin == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "keycloak admin not configured"})
+		return
+	}
+
+	userID := r.PathValue("id")
+	var body struct {
+		RoleID   string `json:"role_id"`
+		RoleName string `json:"role_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if body.RoleID == "" || body.RoleName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role_id and role_name are required"})
+		return
+	}
+
+	roles := []auth.KeycloakRole{{ID: body.RoleID, Name: body.RoleName}}
+	if err := s.keycloakAdmin.AssignUserRole(r.Context(), userID, roles); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "assigned"})
+}
+
+// APIRemoveRoleHandler handles DELETE /api/users/{id}/roles.
+func (s *Server) APIRemoveRoleHandler(w http.ResponseWriter, r *http.Request) {
+	if s.keycloakAdmin == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "keycloak admin not configured"})
+		return
+	}
+
+	userID := r.PathValue("id")
+	var body struct {
+		RoleID   string `json:"role_id"`
+		RoleName string `json:"role_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if body.RoleID == "" || body.RoleName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role_id and role_name are required"})
+		return
+	}
+
+	roles := []auth.KeycloakRole{{ID: body.RoleID, Name: body.RoleName}}
+	if err := s.keycloakAdmin.RemoveUserRole(r.Context(), userID, roles); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+}
+
+// APIResetPasswordHandler handles POST /api/users/{id}/password.
+func (s *Server) APIResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	if s.keycloakAdmin == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "keycloak admin not configured"})
+		return
+	}
+
+	userID := r.PathValue("id")
+	var body struct {
+		Password  string `json:"password"`
+		Temporary bool   `json:"temporary"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if body.Password == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password is required"})
+		return
+	}
+
+	if err := s.keycloakAdmin.ResetPassword(r.Context(), userID, body.Password, body.Temporary); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "password_reset"})
+}
+
 // APISavePolicyHandler handles PUT /api/policies.
 func (s *Server) APISavePolicyHandler(w http.ResponseWriter, r *http.Request) {
 	if s.opa == nil {

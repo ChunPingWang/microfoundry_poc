@@ -8,141 +8,136 @@ import (
 	"github.com/younjinjeong/microfoundry/pkg/auth"
 )
 
-// newOrgStore creates an OrgStore from the active K8s cluster.
-func newOrgStore() (*auth.OrgStore, error) {
+// newWorkspaceStore creates a WorkspaceStore from the active K8s cluster.
+func newWorkspaceStore() (*auth.WorkspaceStore, error) {
 	k8sClient, err := newK8sClient()
 	if err != nil {
 		return nil, err
 	}
-	return auth.NewOrgStore(k8sClient.Clientset, k8sClient.Namespace), nil
+	return auth.NewWorkspaceStore(k8sClient.Clientset, k8sClient.Namespace), nil
 }
 
-func orgsCmd() *cobra.Command {
+func workspacesCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "orgs",
-		Short: "Manage organizations",
-		Long:  "List, create, delete, and manage organizations and their members.",
+		Use:   "workspaces",
+		Short: "Manage workspaces",
+		Long:  "List, create, delete, and manage workspaces and their members.",
 	}
 
 	cmd.AddCommand(
-		orgsListCmd(),
-		orgsCreateCmd(),
-		orgsDeleteCmd(),
-		orgsMembersCmd(),
-		orgsAddMemberCmd(),
-		orgsRemoveMemberCmd(),
-		orgsSetRoleCmd(),
+		workspacesListCmd(),
+		workspacesCreateCmd(),
+		workspacesDeleteCmd(),
+		workspacesMembersCmd(),
+		workspacesAddMemberCmd(),
+		workspacesRemoveMemberCmd(),
+		workspacesSetRoleCmd(),
+		workspacesOrgsCmd(),
 	)
 
 	return cmd
 }
 
-func orgsListCmd() *cobra.Command {
+func workspacesListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List all organizations",
+		Short: "List all workspaces",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			store, err := newOrgStore()
+			store, err := newWorkspaceStore()
 			if err != nil {
 				return err
 			}
 
 			ctx := context.Background()
-			orgs, err := store.List(ctx)
+			workspaces, err := store.List(ctx)
 			if err != nil {
-				return fmt.Errorf("listing organizations: %w", err)
+				return fmt.Errorf("listing workspaces: %w", err)
 			}
 
-			if len(orgs) == 0 {
-				fmt.Println("No organizations found.")
-				fmt.Println("Use 'mf orgs create --name <name> --owner <email>' to create one.")
+			if len(workspaces) == 0 {
+				fmt.Println("No workspaces found.")
+				fmt.Println("Use 'mf workspaces create --name <name> --owner <email>' to create one.")
 				return nil
 			}
 
-			fmt.Printf("%-20s %-30s %-30s %-20s %-20s\n", "ID", "NAME", "OWNER", "NAMESPACE", "CREATED")
-			for _, o := range orgs {
-				created := o.CreatedAt
+			fmt.Printf("%-20s %-30s %-30s %-20s\n", "ID", "NAME", "OWNER", "CREATED")
+			for _, ws := range workspaces {
+				created := ws.CreatedAt
 				if len(created) > 16 {
 					created = created[:16]
 				}
-				fmt.Printf("%-20s %-30s %-30s %-20s %-20s\n",
-					o.ID, o.Name, o.OwnerEmail, o.Namespace, created)
+				fmt.Printf("%-20s %-30s %-30s %-20s\n",
+					ws.ID, ws.Name, ws.OwnerEmail, created)
 			}
 			return nil
 		},
 	}
 }
 
-func orgsCreateCmd() *cobra.Command {
-	var name, owner, workspace string
+func workspacesCreateCmd() *cobra.Command {
+	var name, owner string
 
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a new organization",
+		Short: "Create a new workspace",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" || owner == "" {
 				return fmt.Errorf("--name and --owner are required")
 			}
 
-			store, err := newOrgStore()
+			store, err := newWorkspaceStore()
 			if err != nil {
 				return err
 			}
 
 			ctx := context.Background()
-			org, err := store.Create(ctx, name, owner, workspace)
+			ws, err := store.Create(ctx, name, owner)
 			if err != nil {
-				return fmt.Errorf("creating organization: %w", err)
+				return fmt.Errorf("creating workspace: %w", err)
 			}
 
-			fmt.Printf("Organization created:\n")
-			fmt.Printf("  ID:         %s\n", org.ID)
-			fmt.Printf("  Name:       %s\n", org.Name)
-			fmt.Printf("  Owner:      %s\n", org.OwnerEmail)
-			fmt.Printf("  Namespace:  %s\n", org.Namespace)
-			if org.WorkspaceID != "" {
-				fmt.Printf("  Workspace:  %s\n", org.WorkspaceID)
-			}
+			fmt.Printf("Workspace created:\n")
+			fmt.Printf("  ID:    %s\n", ws.ID)
+			fmt.Printf("  Name:  %s\n", ws.Name)
+			fmt.Printf("  Owner: %s\n", ws.OwnerEmail)
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&name, "name", "", "Organization name (required)")
+	cmd.Flags().StringVar(&name, "name", "", "Workspace name (required)")
 	cmd.Flags().StringVar(&owner, "owner", "", "Owner email address (required)")
-	cmd.Flags().StringVar(&workspace, "workspace", "", "Workspace ID to associate with (optional)")
 	return cmd
 }
 
-func orgsDeleteCmd() *cobra.Command {
+func workspacesDeleteCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "delete [org-id]",
-		Short: "Delete an organization",
-		Long:  "Delete an organization, its member list, and its Kubernetes namespace.",
+		Use:   "delete [ws-id]",
+		Short: "Delete a workspace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			store, err := newOrgStore()
+			store, err := newWorkspaceStore()
 			if err != nil {
 				return err
 			}
 
 			ctx := context.Background()
 			if err := store.Delete(ctx, args[0]); err != nil {
-				return fmt.Errorf("deleting organization: %w", err)
+				return fmt.Errorf("deleting workspace: %w", err)
 			}
 
-			fmt.Printf("Organization %s deleted.\n", args[0])
+			fmt.Printf("Workspace %s deleted.\n", args[0])
 			return nil
 		},
 	}
 }
 
-func orgsMembersCmd() *cobra.Command {
+func workspacesMembersCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "members [org-id]",
-		Short: "List members of an organization",
+		Use:   "members [ws-id]",
+		Short: "List members of a workspace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			store, err := newOrgStore()
+			store, err := newWorkspaceStore()
 			if err != nil {
 				return err
 			}
@@ -154,11 +149,11 @@ func orgsMembersCmd() *cobra.Command {
 			}
 
 			if len(members) == 0 {
-				fmt.Printf("Organization %s has no members.\n", args[0])
+				fmt.Printf("Workspace %s has no members.\n", args[0])
 				return nil
 			}
 
-			fmt.Printf("Members of organization %s:\n\n", args[0])
+			fmt.Printf("Members of workspace %s:\n\n", args[0])
 			fmt.Printf("%-30s %-30s %-10s %-20s\n", "EMAIL", "NAME", "ROLE", "JOINED")
 			for _, m := range members {
 				joined := m.JoinedAt
@@ -173,12 +168,12 @@ func orgsMembersCmd() *cobra.Command {
 	}
 }
 
-func orgsAddMemberCmd() *cobra.Command {
+func workspacesAddMemberCmd() *cobra.Command {
 	var email, name, role string
 
 	cmd := &cobra.Command{
-		Use:   "add-member [org-id]",
-		Short: "Add a member to an organization",
+		Use:   "add-member [ws-id]",
+		Short: "Add a member to a workspace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if email == "" {
@@ -196,7 +191,7 @@ func orgsAddMemberCmd() *cobra.Command {
 				return fmt.Errorf("invalid role %q (must be admin, member, or viewer)", role)
 			}
 
-			store, err := newOrgStore()
+			store, err := newWorkspaceStore()
 			if err != nil {
 				return err
 			}
@@ -206,7 +201,7 @@ func orgsAddMemberCmd() *cobra.Command {
 				return fmt.Errorf("adding member: %w", err)
 			}
 
-			fmt.Printf("Member %s added to organization %s with role %s.\n", email, args[0], role)
+			fmt.Printf("Member %s added to workspace %s with role %s.\n", email, args[0], role)
 			return nil
 		},
 	}
@@ -217,19 +212,19 @@ func orgsAddMemberCmd() *cobra.Command {
 	return cmd
 }
 
-func orgsRemoveMemberCmd() *cobra.Command {
+func workspacesRemoveMemberCmd() *cobra.Command {
 	var email string
 
 	cmd := &cobra.Command{
-		Use:   "remove-member [org-id]",
-		Short: "Remove a member from an organization",
+		Use:   "remove-member [ws-id]",
+		Short: "Remove a member from a workspace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if email == "" {
 				return fmt.Errorf("--email is required")
 			}
 
-			store, err := newOrgStore()
+			store, err := newWorkspaceStore()
 			if err != nil {
 				return err
 			}
@@ -239,7 +234,7 @@ func orgsRemoveMemberCmd() *cobra.Command {
 				return fmt.Errorf("removing member: %w", err)
 			}
 
-			fmt.Printf("Member %s removed from organization %s.\n", email, args[0])
+			fmt.Printf("Member %s removed from workspace %s.\n", email, args[0])
 			return nil
 		},
 	}
@@ -248,12 +243,12 @@ func orgsRemoveMemberCmd() *cobra.Command {
 	return cmd
 }
 
-func orgsSetRoleCmd() *cobra.Command {
+func workspacesSetRoleCmd() *cobra.Command {
 	var email, role string
 
 	cmd := &cobra.Command{
-		Use:   "set-role [org-id]",
-		Short: "Change a member's role in an organization",
+		Use:   "set-role [ws-id]",
+		Short: "Change a member's role in a workspace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if email == "" || role == "" {
@@ -265,7 +260,7 @@ func orgsSetRoleCmd() *cobra.Command {
 				return fmt.Errorf("invalid role %q (must be admin, member, or viewer)", role)
 			}
 
-			store, err := newOrgStore()
+			store, err := newWorkspaceStore()
 			if err != nil {
 				return err
 			}
@@ -275,7 +270,7 @@ func orgsSetRoleCmd() *cobra.Command {
 				return fmt.Errorf("setting role: %w", err)
 			}
 
-			fmt.Printf("Member %s role set to %s in organization %s.\n", email, role, args[0])
+			fmt.Printf("Member %s role set to %s in workspace %s.\n", email, role, args[0])
 			return nil
 		},
 	}
@@ -283,4 +278,37 @@ func orgsSetRoleCmd() *cobra.Command {
 	cmd.Flags().StringVar(&email, "email", "", "Member email address (required)")
 	cmd.Flags().StringVar(&role, "role", "", "New role: admin, member, or viewer (required)")
 	return cmd
+}
+
+func workspacesOrgsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "orgs [ws-id]",
+		Short: "List organizations in a workspace",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, err := newOrgStore()
+			if err != nil {
+				return err
+			}
+
+			ctx := context.Background()
+			orgs, err := store.ListByWorkspace(ctx, args[0])
+			if err != nil {
+				return fmt.Errorf("listing organizations: %w", err)
+			}
+
+			if len(orgs) == 0 {
+				fmt.Printf("Workspace %s has no organizations.\n", args[0])
+				return nil
+			}
+
+			fmt.Printf("Organizations in workspace %s:\n\n", args[0])
+			fmt.Printf("%-20s %-30s %-30s %-20s\n", "ID", "NAME", "OWNER", "NAMESPACE")
+			for _, o := range orgs {
+				fmt.Printf("%-20s %-30s %-30s %-20s\n",
+					o.ID, o.Name, o.OwnerEmail, o.Namespace)
+			}
+			return nil
+		},
+	}
 }

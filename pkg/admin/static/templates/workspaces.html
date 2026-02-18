@@ -1,0 +1,187 @@
+{{define "workspaces.html"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+{{$c := .Content}}
+{{$user := .User}}
+<div class="space-y-6">
+    {{if not $user}}
+    <div class="bg-white rounded-lg shadow p-12 text-center">
+        <h3 class="text-xl font-bold text-gray-900 mt-2">Workspaces</h3>
+        <p class="text-gray-500 mt-2">Enable authentication to manage workspaces.</p>
+    </div>
+    {{else}}
+    <div class="flex gap-6">
+        <!-- Left: Workspace list -->
+        <div class="w-72 flex-shrink-0">
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                    <h3 class="font-semibold text-gray-900">Workspaces</h3>
+                </div>
+                <div class="divide-y divide-gray-100">
+                    {{if $c}}
+                    {{with index $c "Workspaces"}}
+                    {{range .}}
+                    <a href="/workspaces?ws={{.ID}}"
+                       class="block px-4 py-3 hover:bg-gray-50 {{if and $c (eq .ID (index $c "SelectedWS"))}}bg-blue-50 border-l-2 border-blue-600{{end}}">
+                        <div class="font-medium text-sm text-gray-900">{{.Name}}</div>
+                        <div class="text-xs text-gray-500">{{.ID}}</div>
+                        {{if and $c (eq .ID (index $c "ActiveWS"))}}
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 mt-1">Active</span>
+                        {{end}}
+                    </a>
+                    {{end}}
+                    {{end}}
+                    {{end}}
+                </div>
+                <!-- Create workspace form -->
+                <div class="p-4 border-t border-gray-200">
+                    <form method="POST" action="/workspaces" class="flex gap-2">
+                        <input type="text" name="name" placeholder="New workspace..." required
+                               class="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        <button type="submit"
+                                class="px-3 py-1.5 bg-gray-900 text-white text-sm rounded-md hover:bg-gray-800">
+                            Create
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Workspace detail -->
+        <div class="flex-1 space-y-6">
+            {{if and $c (index $c "WSDetail")}}
+            {{$ws := index $c "WSDetail"}}
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-900">{{$ws.Name}}</h2>
+                            <p class="text-sm text-gray-500 mt-1">ID: {{$ws.ID}} &middot; Owner: {{$ws.OwnerEmail}}</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {{if and $c (ne (index $c "ActiveWS") $ws.ID)}}
+                            <form method="POST" action="/workspaces/{{$ws.ID}}/activate">
+                                <button type="submit"
+                                        class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                    Set Active
+                                </button>
+                            </form>
+                            {{end}}
+                            <button hx-delete="/workspaces/{{$ws.ID}}"
+                                    hx-confirm="Delete workspace {{$ws.Name}}? This cannot be undone."
+                                    class="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Members -->
+                <div class="p-6">
+                    <h3 class="font-semibold text-gray-900 mb-4">Members</h3>
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            {{if $c}}{{with index $c "Members"}}
+                            {{range .}}
+                            <tr>
+                                <td class="px-4 py-2 text-sm text-gray-900">{{.Email}}</td>
+                                <td class="px-4 py-2 text-sm text-gray-500">{{.Name}}</td>
+                                <td class="px-4 py-2">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                        {{if eq .Role "admin"}}bg-purple-100 text-purple-800
+                                        {{else if eq .Role "member"}}bg-blue-100 text-blue-800
+                                        {{else}}bg-gray-100 text-gray-800{{end}}">
+                                        {{.Role}}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 text-right">
+                                    <button hx-delete="/workspaces/{{$ws.ID}}/members/{{.Email}}"
+                                            hx-confirm="Remove {{.Email}} from workspace?"
+                                            hx-target="closest tr"
+                                            hx-swap="outerHTML"
+                                            class="text-xs text-red-600 hover:text-red-800">Remove</button>
+                                </td>
+                            </tr>
+                            {{end}}
+                            {{end}}{{end}}
+                        </tbody>
+                    </table>
+
+                    <!-- Add member form -->
+                    <form method="POST" action="/workspaces/{{$ws.ID}}/members" class="mt-4 flex gap-2 items-end">
+                        <div>
+                            <label class="text-xs text-gray-500">Email</label>
+                            <input type="email" name="email" required
+                                   class="block px-3 py-1.5 text-sm border border-gray-300 rounded-md">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500">Name</label>
+                            <input type="text" name="name"
+                                   class="block px-3 py-1.5 text-sm border border-gray-300 rounded-md">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500">Role</label>
+                            <select name="role" class="block px-3 py-1.5 text-sm border border-gray-300 rounded-md">
+                                <option value="admin">Admin</option>
+                                <option value="member" selected>Member</option>
+                                <option value="viewer">Viewer</option>
+                            </select>
+                        </div>
+                        <button type="submit"
+                                class="px-3 py-1.5 bg-gray-900 text-white text-sm rounded-md hover:bg-gray-800">
+                            Add Member
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Organizations in this workspace -->
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-6">
+                    <h3 class="font-semibold text-gray-900 mb-4">Organizations in this Workspace</h3>
+                    {{if and $c (index $c "Orgs")}}
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Namespace</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            {{range index $c "Orgs"}}
+                            <tr>
+                                <td class="px-4 py-2 text-sm font-medium text-gray-900">{{.Name}}</td>
+                                <td class="px-4 py-2 text-sm text-gray-500">{{.ID}}</td>
+                                <td class="px-4 py-2 text-sm text-gray-500">{{.OwnerEmail}}</td>
+                                <td class="px-4 py-2 text-sm text-gray-500">{{.Namespace}}</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                    {{else}}
+                    <p class="text-sm text-gray-500">No organizations in this workspace yet.</p>
+                    {{end}}
+                </div>
+            </div>
+            {{else}}
+            <div class="bg-white rounded-lg shadow p-12 text-center">
+                <p class="text-gray-500">Select a workspace from the list or create a new one.</p>
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+</div>
+{{end}}

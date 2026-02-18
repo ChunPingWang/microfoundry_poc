@@ -5,59 +5,123 @@ import rego.v1
 default allow := false
 
 # When auth is disabled, user is null — allow public resources only
-# SCIM, settings, clusters, and user management still require authentication
+# SCIM, settings, clusters, workspaces, and user management still require authentication
 allow if {
 	input.user == null
-	not input.resource in {"scim", "settings", "clusters", "users"}
+	not input.resource in {"scim", "settings", "clusters", "users", "workspaces", "monitoring", "config"}
 }
 
-# Platform admins have full access to all resources
+# ─── Platform Admin: full access to all resources ───
 allow if {
 	"platform-admin" in input.user.roles
 }
 
-# Any authenticated user can read any resource
+# ─── Workspace Admin: manages orgs within workspace + operations ───
+
+# Workspace admins can read operations resources
 allow if {
 	input.action == "read"
-	input.user.id != ""
+	"workspace-admin" in input.user.roles
+	input.resource in {"dashboard", "apps", "services", "secrets"}
 }
 
-# Org admins can write/update resources within their org
+# Workspace admins can write/delete operations resources
+allow if {
+	input.action in {"write", "delete"}
+	"workspace-admin" in input.user.roles
+	input.resource in {"apps", "services", "secrets"}
+}
+
+# Workspace admins can manage users, orgs, and workspaces
+allow if {
+	"workspace-admin" in input.user.roles
+	input.resource in {"users", "orgs", "workspaces"}
+}
+
+# Workspace admins can view audit logs
+allow if {
+	input.action == "read"
+	"workspace-admin" in input.user.roles
+	input.resource == "audit"
+}
+
+# ─── Org Admin: operations + org-scoped user management ───
+
+# Org admins can read operations resources
+allow if {
+	input.action == "read"
+	"org-admin" in input.user.roles
+	input.resource in {"dashboard", "apps", "services", "secrets"}
+}
+
+# Org admins can write/delete operations resources
+allow if {
+	input.action in {"write", "delete"}
+	"org-admin" in input.user.roles
+	input.resource in {"apps", "services", "secrets"}
+}
+
+# Org admins can read and manage users/orgs (their own org)
+allow if {
+	"org-admin" in input.user.roles
+	input.resource in {"users", "orgs"}
+}
+
+# Org admins can view audit logs
+allow if {
+	input.action == "read"
+	"org-admin" in input.user.roles
+	input.resource == "audit"
+}
+
+# ─── Org Member: operations only ───
+
+# Org members can read operations resources
+allow if {
+	input.action == "read"
+	"org-member" in input.user.roles
+	input.resource in {"dashboard", "apps", "services", "secrets"}
+}
+
+# Org members can write apps, services, secrets (deploy, bind, create)
 allow if {
 	input.action == "write"
-	input.user.org_role == "admin"
+	"org-member" in input.user.roles
+	input.resource in {"apps", "services", "secrets"}
 }
 
-# Org members can write apps, services, and secrets
+# ─── Fallback: any authenticated user with org_role ───
+
+# Org-level admin role also grants write access (for users without realm roles)
+allow if {
+	input.action in {"write", "delete"}
+	input.user.org_role == "admin"
+	input.resource in {"apps", "services", "secrets", "users", "orgs"}
+}
+
+# Org-level member role grants write for apps/services/secrets
 allow if {
 	input.action == "write"
 	input.user.org_role == "member"
 	input.resource in {"apps", "services", "secrets"}
 }
 
-# SCIM endpoints require platform-admin
+# Any authenticated user with an org_role can read operations resources
 allow if {
-	input.resource == "scim"
-	"platform-admin" in input.user.roles
+	input.action == "read"
+	input.user.id != ""
+	input.resource in {"dashboard", "apps", "services", "secrets"}
 }
 
-# Settings and cluster management require platform-admin for writes
+# ─── Fallback: workspace-level role ───
+
+# Workspace-level admin role grants access to workspaces, orgs, users, and operations
 allow if {
-	input.resource in {"settings", "clusters", "catalog"}
-	input.action in {"write", "delete", "admin"}
-	"platform-admin" in input.user.roles
+	input.user.workspace_role == "admin"
+	input.resource in {"dashboard", "apps", "services", "secrets", "users", "orgs", "workspaces"}
 }
 
-# Delete requires org admin role
-allow if {
-	input.action == "delete"
-	input.user.org_role == "admin"
-	input.resource in {"apps", "services", "secrets"}
-}
+# ─── Settings, clusters, catalog, monitoring, config: platform-admin only ───
+# (Implicitly denied for workspace-admin, org-admin and org-member by default allow := false)
 
-# User/org management: org admins can manage their own org
-allow if {
-	input.resource == "users"
-	input.action == "write"
-	input.user.org_role == "admin"
-}
+# SCIM endpoints require platform-admin (covered by the platform-admin rule above)

@@ -51,6 +51,7 @@ func adminCmd() *cobra.Command {
 				}
 
 				orgStore := auth.NewOrgStore(activeClient.Clientset, activeClient.Namespace)
+				wsStore := auth.NewWorkspaceStore(activeClient.Clientset, activeClient.Namespace)
 
 				authCfg := auth.AuthConfig{
 					Enabled:      cfg.Auth.Enabled,
@@ -61,12 +62,13 @@ func adminCmd() *cobra.Command {
 					SessionKey:   cfg.Auth.SessionKey,
 				}
 
-				oidcAuth, err := auth.NewOIDCAuthenticator(ctx, authCfg, sessions, orgStore)
+				oidcAuth, err := auth.NewOIDCAuthenticator(ctx, authCfg, sessions, orgStore, wsStore)
 				if err != nil {
 					return fmt.Errorf("initializing OIDC: %w", err)
 				}
 
 				opts = append(opts, admin.WithAuth(oidcAuth, sessions, orgStore))
+				opts = append(opts, admin.WithWorkspaceStore(wsStore))
 				fmt.Printf("Authentication enabled (Keycloak: %s)\n", cfg.Auth.IssuerURL)
 
 				// Keycloak Admin API client (optional — needs admin_base_url)

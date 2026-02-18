@@ -111,6 +111,14 @@ func usersCreateCmd() *cobra.Command {
 				return err
 			}
 
+			// Default first/last name to username if not provided (Keycloak requires non-empty profile)
+			if firstName == "" {
+				firstName = username
+			}
+			if lastName == "" {
+				lastName = "-"
+			}
+
 			ctx := context.Background()
 			user := &auth.KeycloakUser{
 				Username:      username,
@@ -275,21 +283,46 @@ func usersRolesCmd() *cobra.Command {
 	}
 }
 
+// lookupRoleByName finds a realm role by name, returning its ID.
+func lookupRoleByName(kc *auth.KeycloakAdminClient, name string) (auth.KeycloakRole, error) {
+	ctx := context.Background()
+	roles, err := kc.GetRealmRoles(ctx)
+	if err != nil {
+		return auth.KeycloakRole{}, fmt.Errorf("listing realm roles: %w", err)
+	}
+	for _, r := range roles {
+		if r.Name == name {
+			return r, nil
+		}
+	}
+	return auth.KeycloakRole{}, fmt.Errorf("role %q not found in realm", name)
+}
+
 func usersAssignRoleCmd() *cobra.Command {
 	var roleID, roleName string
 
 	cmd := &cobra.Command{
 		Use:   "assign-role [user-id]",
 		Short: "Assign a realm role to a user",
+		Long:  "Assign a realm role to a user. Use --role-name to auto-lookup the role ID, or provide both --role-id and --role-name.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if roleID == "" || roleName == "" {
-				return fmt.Errorf("--role-id and --role-name are required")
+			if roleName == "" {
+				return fmt.Errorf("--role-name is required")
 			}
 
 			kc, err := newKeycloakAdmin()
 			if err != nil {
 				return err
+			}
+
+			// Auto-lookup role ID if not provided
+			if roleID == "" {
+				role, err := lookupRoleByName(kc, roleName)
+				if err != nil {
+					return err
+				}
+				roleID = role.ID
 			}
 
 			ctx := context.Background()
@@ -303,7 +336,7 @@ func usersAssignRoleCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&roleID, "role-id", "", "Keycloak role ID (required)")
+	cmd.Flags().StringVar(&roleID, "role-id", "", "Keycloak role ID (auto-resolved if omitted)")
 	cmd.Flags().StringVar(&roleName, "role-name", "", "Keycloak role name (required)")
 	return cmd
 }
@@ -314,15 +347,25 @@ func usersRemoveRoleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove-role [user-id]",
 		Short: "Remove a realm role from a user",
+		Long:  "Remove a realm role from a user. Use --role-name to auto-lookup the role ID, or provide both --role-id and --role-name.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if roleID == "" || roleName == "" {
-				return fmt.Errorf("--role-id and --role-name are required")
+			if roleName == "" {
+				return fmt.Errorf("--role-name is required")
 			}
 
 			kc, err := newKeycloakAdmin()
 			if err != nil {
 				return err
+			}
+
+			// Auto-lookup role ID if not provided
+			if roleID == "" {
+				role, err := lookupRoleByName(kc, roleName)
+				if err != nil {
+					return err
+				}
+				roleID = role.ID
 			}
 
 			ctx := context.Background()
@@ -336,7 +379,7 @@ func usersRemoveRoleCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&roleID, "role-id", "", "Keycloak role ID (required)")
+	cmd.Flags().StringVar(&roleID, "role-id", "", "Keycloak role ID (auto-resolved if omitted)")
 	cmd.Flags().StringVar(&roleName, "role-name", "", "Keycloak role name (required)")
 	return cmd
 }

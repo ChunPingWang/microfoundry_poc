@@ -52,7 +52,7 @@ func (s *Server) MonitoringHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := s.pageData("Metrics & Alerts", "monitoring")
+	data := s.pageDataWithUser(r,"Metrics & Alerts", "monitoring")
 	data.Content = map[string]any{
 		"OverviewIframeURL": overviewURL,
 		"ClusterIframeURL":  clusterURL,

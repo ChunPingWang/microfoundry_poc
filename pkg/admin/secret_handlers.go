@@ -42,7 +42,7 @@ func (s *Server) SecretsListHandler(w http.ResponseWriter, r *http.Request) {
 		items = filtered
 	}
 
-	data := s.pageData("Secrets Manager", "secrets")
+	data := s.pageDataWithUser(r,"Secrets Manager", "secrets")
 	data.Content = map[string]any{
 		"Secrets": items,
 		"Filter":  filter,
@@ -68,7 +68,7 @@ func (s *Server) SecretDetailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := s.pageData(name, "secrets")
+	data := s.pageDataWithUser(r,name, "secrets")
 	data.Content = map[string]any{
 		"Detail": detail,
 	}
@@ -100,7 +100,7 @@ func (s *Server) SecretRevealHandler(w http.ResponseWriter, r *http.Request) {
 
 // CreateSecretFormHandler renders the secret creation form.
 func (s *Server) CreateSecretFormHandler(w http.ResponseWriter, r *http.Request) {
-	data := s.pageData("Create Secret", "secrets")
+	data := s.pageDataWithUser(r,"Create Secret", "secrets")
 	s.templates.Render(w, "secret_create.html", data)
 }
 

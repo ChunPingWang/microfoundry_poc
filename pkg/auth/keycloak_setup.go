@@ -76,7 +76,7 @@ func (kc *KeycloakConfigurator) ConfigureRealm(adminUser, adminPass, clientSecre
 		// Realm already exists — continue
 	}
 
-	// Create client
+	// Create client (with service account for admin API access)
 	client := map[string]any{
 		"clientId":                  "mf-admin",
 		"name":                      "MicroFoundry Admin",
@@ -85,7 +85,8 @@ func (kc *KeycloakConfigurator) ConfigureRealm(adminUser, adminPass, clientSecre
 		"publicClient":              false,
 		"secret":                    clientSecret,
 		"standardFlowEnabled":       true,
-		"directAccessGrantsEnabled": false,
+		"directAccessGrantsEnabled": true,
+		"serviceAccountsEnabled":    true,
 		"redirectUris":              []string{redirectURI},
 		"webOrigins":                []string{"*"},
 		"attributes": map[string]string{
@@ -98,8 +99,11 @@ func (kc *KeycloakConfigurator) ConfigureRealm(adminUser, adminPass, clientSecre
 		}
 	}
 
+	// Assign realm-management roles to the service account for admin API access
+	kc.assignServiceAccountRoles(token, clientSecret)
+
 	// Create realm roles
-	roles := []string{"platform-admin", "org-admin", "org-member", "viewer"}
+	roles := []string{"platform-admin", "workspace-admin", "org-admin", "org-member", "viewer"}
 	for _, role := range roles {
 		roleBody := map[string]any{
 			"name": role,
@@ -141,6 +145,98 @@ func (kc *KeycloakConfigurator) AddIdentityProvider(adminUser, adminPass, provid
 	}
 
 	return nil
+}
+
+// assignServiceAccountRoles grants the mf-admin service account the realm-management roles
+// needed for user CRUD via the Keycloak Admin REST API.
+func (kc *KeycloakConfigurator) assignServiceAccountRoles(token, clientSecret string) {
+	// 1. Find the mf-admin client's internal ID
+	clientInternalID := kc.getJSON(token, "/admin/realms/microfoundry/clients?clientId=mf-admin", "id")
+	if clientInternalID == "" {
+		return
+	}
+
+	// 2. Get the service account user
+	saUserID := kc.getJSON(token, fmt.Sprintf("/admin/realms/microfoundry/clients/%s/service-account-user", clientInternalID), "id")
+	if saUserID == "" {
+		return
+	}
+
+	// 3. Find the realm-management client's internal ID
+	realmMgmtID := kc.getJSON(token, "/admin/realms/microfoundry/clients?clientId=realm-management", "id")
+	if realmMgmtID == "" {
+		return
+	}
+
+	// 4. Get available realm-management client roles
+	rolesURL := fmt.Sprintf("/admin/realms/microfoundry/clients/%s/roles", realmMgmtID)
+	roles := kc.getJSONArray(token, rolesURL)
+
+	// 5. Assign all realm-management roles to the service account
+	if len(roles) > 0 {
+		assignURL := fmt.Sprintf("/admin/realms/microfoundry/users/%s/role-mappings/clients/%s", saUserID, realmMgmtID)
+		_ = kc.post(token, assignURL, roles)
+	}
+}
+
+// getJSON fetches a JSON endpoint and returns the value of a field from the first array element or object.
+func (kc *KeycloakConfigurator) getJSON(token, path, field string) string {
+	req, err := http.NewRequest("GET", kc.baseURL+path, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := kc.httpClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return ""
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	// Try as array first
+	var arr []map[string]any
+	if json.Unmarshal(body, &arr) == nil && len(arr) > 0 {
+		if v, ok := arr[0][field].(string); ok {
+			return v
+		}
+	}
+
+	// Try as object
+	var obj map[string]any
+	if json.Unmarshal(body, &obj) == nil {
+		if v, ok := obj[field].(string); ok {
+			return v
+		}
+	}
+
+	return ""
+}
+
+// getJSONArray fetches a JSON array endpoint.
+func (kc *KeycloakConfigurator) getJSONArray(token, path string) []map[string]any {
+	req, err := http.NewRequest("GET", kc.baseURL+path, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := kc.httpClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var arr []map[string]any
+	json.NewDecoder(resp.Body).Decode(&arr)
+	return arr
 }
 
 func (kc *KeycloakConfigurator) post(token, path string, body any) error {
