@@ -400,9 +400,10 @@ func (c *Client) GetAppDetail(ctx context.Context, name string) (*models.AppDeta
 	// Get secrets
 	secrets := c.listAppSecrets(ctx, name)
 
-	// Parse services from annotation
+	// Parse bound services from pod template annotation (written by service binder)
 	var services []models.ServiceBindingInfo
-	if svcList := ann["microfoundry.io/services"]; svcList != "" {
+	podTemplateAnn := dep.Spec.Template.Annotations
+	if svcList := podTemplateAnn["microfoundry.io/bound-services"]; svcList != "" {
 		for _, s := range strings.Split(svcList, ",") {
 			s = strings.TrimSpace(s)
 			if s != "" {
