@@ -562,7 +562,7 @@ func (c *Client) getAppRoutes(ctx context.Context, appName string) []models.Rout
 					Host:     hostPart,
 					Domain:   domainPart,
 					Path:     path.Path,
-					URL:      scheme + "://" + host + path.Path,
+					URL:      host + path.Path,
 					Protocol: scheme,
 				})
 			}

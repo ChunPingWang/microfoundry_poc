@@ -81,8 +81,9 @@ func (s *TopologyStore) Save(ctx context.Context, config *models.TopologyConfig)
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
+	isNew := errors.IsNotFound(err)
 
-	if errors.IsNotFound(err) {
+	if isNew {
 		// New topology
 		config.Metadata.Version = 1
 		config.Metadata.CreatedAt = time.Now()
@@ -121,7 +122,7 @@ func (s *TopologyStore) Save(ctx context.Context, config *models.TopologyConfig)
 		Data: data,
 	}
 
-	if errors.IsNotFound(err) {
+	if isNew {
 		_, err = s.k8sClient.Clientset.CoreV1().ConfigMaps(ns).Create(ctx, cm, metav1.CreateOptions{})
 	} else {
 		cm.ResourceVersion = existing.ResourceVersion
