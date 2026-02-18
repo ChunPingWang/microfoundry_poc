@@ -34,6 +34,59 @@ func (s *Server) OrgsPageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch tab {
+	case "workspaces":
+		if s.wsStore != nil {
+			ctx := r.Context()
+			workspaces, err := s.wsStore.GetUserWorkspaces(ctx, user.Email)
+			if err != nil {
+				log.Printf("[IAM] failed to get user workspaces for %s: %v", user.Email, err)
+				content["Error"] = "Failed to load workspaces"
+			}
+			// Platform admins see all workspaces
+			for _, role := range user.Roles {
+				if role == "platform-admin" {
+					workspaces, err = s.wsStore.List(ctx)
+					if err != nil {
+						log.Printf("[IAM] failed to list all workspaces: %v", err)
+					}
+					break
+				}
+			}
+			selectedWS := r.URL.Query().Get("ws")
+			if selectedWS == "" && len(workspaces) > 0 {
+				selectedWS = workspaces[0].ID
+			}
+			content["Workspaces"] = workspaces
+			content["SelectedWS"] = selectedWS
+			content["ActiveWS"] = user.ActiveWorkspaceID
+			if selectedWS != "" {
+				wsDetail, err := s.wsStore.Get(ctx, selectedWS)
+				if err == nil {
+					content["WSDetail"] = wsDetail
+					members, err := s.wsStore.ListMembers(ctx, selectedWS)
+					if err != nil {
+						log.Printf("[IAM] failed to list members for ws %s: %v", selectedWS, err)
+					}
+					content["Members"] = members
+					if s.orgStore_ != nil {
+						orgs, err := s.orgStore_.ListByWorkspace(ctx, selectedWS)
+						if err != nil {
+							log.Printf("[IAM] failed to list orgs for ws %s: %v", selectedWS, err)
+						}
+						content["Orgs"] = orgs
+					}
+					userRole := "viewer"
+					for _, m := range members {
+						if m.Email == user.Email {
+							userRole = m.Role
+							break
+						}
+					}
+					content["UserRole"] = userRole
+				}
+			}
+		}
+
 	case "orgs":
 		ctx := r.Context()
 		store := s.orgStore()

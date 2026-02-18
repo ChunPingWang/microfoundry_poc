@@ -216,10 +216,11 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"tab_performance.html":  base,
 		"alerts_list.html":      base,
 		"log_history.html":      base,
-		"tab_iam_orgs.html":     base,
-		"tab_iam_users.html":    base,
-		"tab_iam_policies.html": base,
-		"tab_iam_audit.html":    base,
+		"tab_iam_workspaces.html": base,
+		"tab_iam_orgs.html":      base,
+		"tab_iam_users.html":     base,
+		"tab_iam_policies.html":  base,
+		"tab_iam_audit.html":     base,
 	}
 
 	return &TemplateRenderer{base: base, pages: pages, partials: partials}

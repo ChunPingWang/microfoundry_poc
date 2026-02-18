@@ -267,6 +267,13 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("DELETE /users/keycloak/{id}", s.DeleteKeycloakUserHandler)
 	s.mux.HandleFunc("POST /users/keycloak/{id}/toggle", s.ToggleKeycloakUserHandler)
 	s.mux.HandleFunc("POST /users/keycloak/{id}/roles", s.AssignKeycloakRoleHandler)
+	// IAM — Workspace management (within /users tab)
+	s.mux.HandleFunc("POST /users/workspaces", s.IAMCreateWorkspaceHandler)
+	s.mux.HandleFunc("DELETE /users/workspaces/{id}", s.IAMDeleteWorkspaceHandler)
+	s.mux.HandleFunc("POST /users/workspaces/{id}/members", s.IAMInviteWorkspaceMemberHandler)
+	s.mux.HandleFunc("DELETE /users/workspaces/{id}/members/{email}", s.IAMRemoveWorkspaceMemberHandler)
+	s.mux.HandleFunc("POST /users/workspaces/{id}/members/{email}/role", s.IAMSetWorkspaceMemberRoleHandler)
+	s.mux.HandleFunc("POST /users/workspaces/{id}/activate", s.IAMSwitchWorkspaceHandler)
 	// IAM — OPA policies
 	s.mux.HandleFunc("POST /users/policies", s.SavePolicyHandler)
 
