@@ -104,7 +104,7 @@
             {{else if eq $tab "config"}}
                 {{template "tab_config.html" $d}}
             {{else if eq $tab "services"}}
-                {{template "tab_services.html" $d}}
+                {{template "tab_services.html" (index $c "ServicesData")}}
             {{else if eq $tab "routes"}}
                 {{template "tab_routes.html" $d}}
             {{else if eq $tab "logs"}}
