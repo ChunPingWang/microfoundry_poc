@@ -16,20 +16,22 @@ var defaultPolicies embed.FS
 
 // AuthzInput is the input document sent to OPA for authorization decisions.
 type AuthzInput struct {
-	User     *AuthzUser `json:"user"`
-	Action   string     `json:"action"`
-	Resource string     `json:"resource"`
-	OrgID    string     `json:"org_id,omitempty"`
-	Path     string     `json:"path"`
-	Method   string     `json:"method"`
+	User        *AuthzUser `json:"user"`
+	Action      string     `json:"action"`
+	Resource    string     `json:"resource"`
+	OrgID       string     `json:"org_id,omitempty"`
+	WorkspaceID string     `json:"workspace_id,omitempty"`
+	Path        string     `json:"path"`
+	Method      string     `json:"method"`
 }
 
 // AuthzUser represents the user context for OPA evaluation.
 type AuthzUser struct {
-	ID      string   `json:"id"`
-	Email   string   `json:"email"`
-	Roles   []string `json:"roles"`
-	OrgRole string   `json:"org_role"`
+	ID            string   `json:"id"`
+	Email         string   `json:"email"`
+	Roles         []string `json:"roles"`
+	OrgRole       string   `json:"org_role"`
+	WorkspaceRole string   `json:"workspace_role"`
 }
 
 // AuthzResult contains the OPA decision.
@@ -98,12 +100,13 @@ func (e *OPAEngine) Evaluate(ctx context.Context, input AuthzInput) (AuthzResult
 		rego.Query(e.query),
 		rego.Compiler(compiler),
 		rego.Input(map[string]any{
-			"user":     toMap(input.User),
-			"action":   input.Action,
-			"resource": input.Resource,
-			"org_id":   input.OrgID,
-			"path":     input.Path,
-			"method":   input.Method,
+			"user":         toMap(input.User),
+			"action":       input.Action,
+			"resource":     input.Resource,
+			"org_id":       input.OrgID,
+			"workspace_id": input.WorkspaceID,
+			"path":         input.Path,
+			"method":       input.Method,
 		}),
 	)
 
@@ -172,9 +175,10 @@ func toMap(user *AuthzUser) any {
 		return nil
 	}
 	return map[string]any{
-		"id":       user.ID,
-		"email":    user.Email,
-		"roles":    user.Roles,
-		"org_role": user.OrgRole,
+		"id":             user.ID,
+		"email":          user.Email,
+		"roles":          user.Roles,
+		"org_role":       user.OrgRole,
+		"workspace_role": user.WorkspaceRole,
 	}
 }

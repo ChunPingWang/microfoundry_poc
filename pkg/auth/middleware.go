@@ -10,6 +10,7 @@ type contextKey string
 const (
 	userContextKey contextKey = "mf-user"
 	orgContextKey  contextKey = "mf-org"
+	wsContextKey   contextKey = "mf-workspace"
 )
 
 // UserFromContext returns the authenticated user from the request context, or nil.
@@ -24,6 +25,12 @@ func ActiveOrgFromContext(ctx context.Context) string {
 	return s
 }
 
+// ActiveWorkspaceFromContext returns the active workspace ID from the request context.
+func ActiveWorkspaceFromContext(ctx context.Context) string {
+	s, _ := ctx.Value(wsContextKey).(string)
+	return s
+}
+
 // InjectUser reads the session and adds the user to the request context.
 // Does not block unauthenticated requests.
 func InjectUser(sessions *SessionManager) func(http.Handler) http.Handler {
@@ -33,6 +40,7 @@ func InjectUser(sessions *SessionManager) func(http.Handler) http.Handler {
 			if user != nil {
 				ctx := context.WithValue(r.Context(), userContextKey, user)
 				ctx = context.WithValue(ctx, orgContextKey, user.ActiveOrgID)
+				ctx = context.WithValue(ctx, wsContextKey, user.ActiveWorkspaceID)
 				r = r.WithContext(ctx)
 			}
 			next.ServeHTTP(w, r)
@@ -85,9 +93,9 @@ func RequireOrgRole(minRole string, sessions *SessionManager, orgStore *OrgStore
 				return
 			}
 
-			// Platform admins bypass org role checks
+			// Platform admins and workspace admins bypass org role checks
 			for _, role := range user.Roles {
-				if role == "platform-admin" {
+				if role == "platform-admin" || role == "workspace-admin" {
 					next.ServeHTTP(w, r)
 					return
 				}

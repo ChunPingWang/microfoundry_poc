@@ -15,7 +15,7 @@ func (s *Server) ClustersListHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	clusters := s.clientManager.ListClusters(ctx)
 
-	data := s.pageData("Clusters", "clusters")
+	data := s.pageDataWithUser(r,"Clusters", "clusters")
 	data.Content = map[string]any{
 		"Clusters":      clusters,
 		"ActiveCluster": s.clientManager.GetActive(),
@@ -34,7 +34,7 @@ func (s *Server) ClusterDetailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := s.pageData(detail.Name, "clusters")
+	data := s.pageDataWithUser(r,detail.Name, "clusters")
 	data.Content = detail
 	s.templates.Render(w, "cluster_detail.html", data)
 }

@@ -9,7 +9,7 @@ import (
 
 // OPAMiddleware creates an HTTP middleware that evaluates OPA authorization policies.
 // When opa is nil (auth disabled), all requests are allowed.
-func OPAMiddleware(opa *OPAEngine, sessions *SessionManager, orgStore *OrgStore, auditLog *AuditLog) func(http.Handler) http.Handler {
+func OPAMiddleware(opa *OPAEngine, sessions *SessionManager, orgStore *OrgStore, wsStore *WorkspaceStore, auditLog *AuditLog) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip public paths
@@ -24,7 +24,7 @@ func OPAMiddleware(opa *OPAEngine, sessions *SessionManager, orgStore *OrgStore,
 				return
 			}
 
-			input := buildAuthzInput(r, orgStore)
+			input := buildAuthzInput(r, orgStore, wsStore)
 			result, err := opa.Evaluate(r.Context(), input)
 			if err != nil {
 				http.Error(w, "authorization error", http.StatusInternalServerError)
@@ -59,7 +59,14 @@ func OPAMiddleware(opa *OPAEngine, sessions *SessionManager, orgStore *OrgStore,
 					http.Redirect(w, r, "/login", http.StatusFound)
 					return
 				}
-				http.Error(w, "Forbidden", http.StatusForbidden)
+				// API routes get JSON 403; web routes redirect to denied page
+				if strings.HasPrefix(r.URL.Path, "/api/") {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					w.Write([]byte(`{"error":"forbidden"}`))
+					return
+				}
+				http.Redirect(w, r, "/denied", http.StatusFound)
 				return
 			}
 
@@ -82,20 +89,21 @@ func isPublicPath(path string) bool {
 			return true
 		}
 	}
-	return path == "/" || path == "/favicon.ico"
+	return path == "/" || path == "/favicon.ico" || path == "/denied"
 }
 
 // buildAuthzInput constructs the OPA input from the HTTP request context.
-func buildAuthzInput(r *http.Request, orgStore *OrgStore) AuthzInput {
+func buildAuthzInput(r *http.Request, orgStore *OrgStore, wsStore *WorkspaceStore) AuthzInput {
 	user := UserFromContext(r.Context())
 	action, resource := classifyRoute(r.Method, r.URL.Path)
 
 	input := AuthzInput{
-		Action:   action,
-		Resource: resource,
-		OrgID:    ActiveOrgFromContext(r.Context()),
-		Path:     r.URL.Path,
-		Method:   r.Method,
+		Action:      action,
+		Resource:    resource,
+		OrgID:       ActiveOrgFromContext(r.Context()),
+		WorkspaceID: ActiveWorkspaceFromContext(r.Context()),
+		Path:        r.URL.Path,
+		Method:      r.Method,
 	}
 
 	if user != nil {
@@ -112,11 +120,27 @@ func buildAuthzInput(r *http.Request, orgStore *OrgStore) AuthzInput {
 				}
 			}
 		}
+
+		wsRole := ""
+		if wsStore != nil && input.WorkspaceID != "" {
+			members, err := wsStore.ListMembers(r.Context(), input.WorkspaceID)
+			if err != nil {
+				log.Printf("[OPA] failed to list workspace members for ws %s: %v", input.WorkspaceID, err)
+			}
+			for _, m := range members {
+				if m.Email == user.Email {
+					wsRole = m.Role
+					break
+				}
+			}
+		}
+
 		input.User = &AuthzUser{
-			ID:      user.UserID,
-			Email:   user.Email,
-			Roles:   user.Roles,
-			OrgRole: orgRole,
+			ID:            user.UserID,
+			Email:         user.Email,
+			Roles:         user.Roles,
+			OrgRole:       orgRole,
+			WorkspaceRole: wsRole,
 		}
 	}
 
@@ -163,6 +187,8 @@ func classifyRoute(method, path string) (action, resource string) {
 		resource = "settings"
 	case "users":
 		resource = "users"
+	case "workspaces":
+		resource = "workspaces"
 	case "scim":
 		resource = "scim"
 	case "api":
@@ -189,6 +215,8 @@ func classifyRoute(method, path string) (action, resource string) {
 				resource = "settings"
 			case "audit":
 				resource = "audit"
+			case "workspaces":
+				resource = "workspaces"
 			default:
 				resource = parts[1]
 			}

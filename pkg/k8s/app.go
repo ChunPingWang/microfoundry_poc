@@ -214,6 +214,40 @@ func (c *Client) DeleteApp(ctx context.Context, name string) error {
 	return nil
 }
 
+// UpdateAppResources updates the memory and/or disk resource limits for an app.
+// Modifying the pod template spec triggers a rolling restart of all pods.
+func (c *Client) UpdateAppResources(ctx context.Context, name string, memoryMB, diskMB int) error {
+	depAPI := c.Clientset.AppsV1().Deployments(c.Namespace)
+	dep, err := depAPI.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("getting deployment %s: %w", name, err)
+	}
+
+	if len(dep.Spec.Template.Spec.Containers) == 0 {
+		return fmt.Errorf("deployment %s has no containers", name)
+	}
+
+	container := &dep.Spec.Template.Spec.Containers[0]
+
+	if memoryMB > 0 {
+		container.Resources.Limits[corev1.ResourceMemory] = resource.MustParse(fmt.Sprintf("%dMi", memoryMB))
+		container.Resources.Requests[corev1.ResourceMemory] = resource.MustParse(fmt.Sprintf("%dMi", memoryMB/2))
+	}
+
+	if diskMB > 0 {
+		if dep.Annotations == nil {
+			dep.Annotations = map[string]string{}
+		}
+		dep.Annotations["microfoundry.io/disk-mb"] = strconv.Itoa(diskMB)
+	}
+
+	_, err = depAPI.Update(ctx, dep, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("updating resources for %s: %w", name, err)
+	}
+	return nil
+}
+
 // ScaleApp updates the replica count for an app.
 func (c *Client) ScaleApp(ctx context.Context, name string, instances int) error {
 	scale, err := c.Clientset.AppsV1().Deployments(c.Namespace).GetScale(ctx, name, metav1.GetOptions{})

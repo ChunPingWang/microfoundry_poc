@@ -25,6 +25,9 @@ func main() {
 
 	rootCmd.AddCommand(
 		versionCmd(),
+		loginCmd(),
+		logoutCmd(),
+		whoamiCmd(),
 		pushCmd(),
 		appsCmd(),
 		appCmd(),
@@ -45,6 +48,7 @@ func main() {
 		deleteSecretCmd(),
 		usersCmd(),
 		orgsCmd(),
+		workspacesCmd(),
 		setupRoot,
 	)
 

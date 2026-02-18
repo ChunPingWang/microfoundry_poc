@@ -31,6 +31,7 @@ type Server struct {
 	oidcAuth  *auth.OIDCAuthenticator
 	sessions  *auth.SessionManager
 	orgStore_ *auth.OrgStore
+	wsStore   *auth.WorkspaceStore
 	// IAM (nil when not configured)
 	keycloakAdmin *auth.KeycloakAdminClient
 	opa           *auth.OPAEngine
@@ -54,6 +55,13 @@ func WithAuth(oidc *auth.OIDCAuthenticator, sessions *auth.SessionManager, orgSt
 		s.oidcAuth = oidc
 		s.sessions = sessions
 		s.orgStore_ = orgStore
+	}
+}
+
+// WithWorkspaceStore sets the workspace store.
+func WithWorkspaceStore(wsStore *auth.WorkspaceStore) ServerOption {
+	return func(s *Server) {
+		s.wsStore = wsStore
 	}
 }
 
@@ -219,6 +227,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /auth/login", s.AuthLoginHandler)
 	s.mux.HandleFunc("GET /auth/callback", s.AuthCallbackHandler)
 	s.mux.HandleFunc("GET /auth/logout", s.AuthLogoutHandler)
+	s.mux.HandleFunc("GET /denied", s.DeniedHandler)
 
 	// Page routes
 	s.mux.HandleFunc("GET /{$}", s.DashboardHandler)
@@ -347,15 +356,43 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/settings/endpoints", s.APIGetEndpointsHandler)
 	s.mux.HandleFunc("PUT /api/settings/endpoints", s.APISaveEndpointsHandler)
 
+	// Workspace routes
+	s.mux.HandleFunc("GET /workspaces", s.WorkspacesPageHandler)
+	s.mux.HandleFunc("POST /workspaces", s.CreateWorkspaceHandler)
+	s.mux.HandleFunc("DELETE /workspaces/{id}", s.DeleteWorkspaceHandler)
+	s.mux.HandleFunc("POST /workspaces/{id}/members", s.InviteWorkspaceMemberHandler)
+	s.mux.HandleFunc("DELETE /workspaces/{id}/members/{email}", s.RemoveWorkspaceMemberHandler)
+	s.mux.HandleFunc("POST /workspaces/{id}/members/{email}/role", s.SetWorkspaceMemberRoleHandler)
+	s.mux.HandleFunc("POST /workspaces/{id}/activate", s.SwitchWorkspaceHandler)
+
+	// Workspace API routes
+	s.mux.HandleFunc("GET /api/workspaces", s.APIListWorkspacesHandler)
+	s.mux.HandleFunc("GET /api/workspaces/{id}", s.APIGetWorkspaceHandler)
+	s.mux.HandleFunc("POST /api/workspaces", s.APICreateWorkspaceHandler)
+	s.mux.HandleFunc("DELETE /api/workspaces/{id}", s.APIDeleteWorkspaceHandler)
+	s.mux.HandleFunc("GET /api/workspaces/{id}/members", s.APIListWorkspaceMembersHandler)
+	s.mux.HandleFunc("POST /api/workspaces/{id}/members", s.APIAddWorkspaceMemberHandler)
+	s.mux.HandleFunc("DELETE /api/workspaces/{id}/members/{email}", s.APIRemoveWorkspaceMemberHandler)
+	s.mux.HandleFunc("GET /api/workspaces/{id}/orgs", s.APIListWorkspaceOrgsHandler)
+
 	// Org API routes
 	s.mux.HandleFunc("GET /api/orgs", s.APIListOrgsHandler)
 	s.mux.HandleFunc("GET /api/orgs/{id}", s.APIGetOrgHandler)
 	s.mux.HandleFunc("POST /api/orgs", s.APICreateOrgHandler)
+	s.mux.HandleFunc("DELETE /api/orgs/{id}", s.APIDeleteOrgHandler)
 	s.mux.HandleFunc("GET /api/orgs/{id}/members", s.APIListMembersHandler)
+	s.mux.HandleFunc("POST /api/orgs/{id}/members", s.APIAddMemberHandler)
+	s.mux.HandleFunc("DELETE /api/orgs/{id}/members/{email}", s.APIRemoveMemberHandler)
 
 	// IAM API routes
 	s.mux.HandleFunc("GET /api/audit", s.APIAuditLogHandler)
 	s.mux.HandleFunc("GET /api/users", s.APIKeycloakUsersHandler)
+	s.mux.HandleFunc("POST /api/users", s.APICreateUserHandler)
+	s.mux.HandleFunc("DELETE /api/users/{id}", s.APIDeleteUserHandler)
+	s.mux.HandleFunc("POST /api/users/{id}/toggle", s.APIToggleUserHandler)
+	s.mux.HandleFunc("POST /api/users/{id}/roles", s.APIAssignRoleHandler)
+	s.mux.HandleFunc("DELETE /api/users/{id}/roles", s.APIRemoveRoleHandler)
+	s.mux.HandleFunc("POST /api/users/{id}/password", s.APIResetPasswordHandler)
 	s.mux.HandleFunc("GET /api/policies", s.APIPoliciesHandler)
 	s.mux.HandleFunc("PUT /api/policies", s.APISavePolicyHandler)
 
@@ -376,7 +413,7 @@ func (s *Server) ListenAndServe(addr string) error {
 
 	// OPA authorization (needs user from context → must wrap AFTER InjectUser)
 	if s.opa != nil {
-		handler = auth.OPAMiddleware(s.opa, s.sessions, s.orgStore_, s.auditLog)(handler)
+		handler = auth.OPAMiddleware(s.opa, s.sessions, s.orgStore_, s.wsStore, s.auditLog)(handler)
 	}
 
 	// InjectUser populates user in context (wraps OUTSIDE OPA so it runs first)

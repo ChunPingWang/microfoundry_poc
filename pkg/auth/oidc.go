@@ -19,13 +19,14 @@ type OIDCAuthenticator struct {
 	verifier     *oidc.IDTokenVerifier
 	sessions     *SessionManager
 	orgStore     *OrgStore
+	wsStore      *WorkspaceStore
 	issuerURL    string
 	clientID     string
 }
 
 // NewOIDCAuthenticator creates an authenticator from the auth config.
 // It performs OIDC discovery against the issuer URL.
-func NewOIDCAuthenticator(ctx context.Context, cfg AuthConfig, sessions *SessionManager, orgStore *OrgStore) (*OIDCAuthenticator, error) {
+func NewOIDCAuthenticator(ctx context.Context, cfg AuthConfig, sessions *SessionManager, orgStore *OrgStore, wsStore *WorkspaceStore) (*OIDCAuthenticator, error) {
 	provider, err := oidc.NewProvider(ctx, cfg.IssuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("oidc discovery: %w", err)
@@ -47,6 +48,7 @@ func NewOIDCAuthenticator(ctx context.Context, cfg AuthConfig, sessions *Session
 		verifier:     verifier,
 		sessions:     sessions,
 		orgStore:     orgStore,
+		wsStore:      wsStore,
 		issuerURL:    cfg.IssuerURL,
 		clientID:     cfg.ClientID,
 	}, nil
@@ -145,6 +147,13 @@ func (a *OIDCAuthenticator) CallbackHandler(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	// Ensure default workspace exists for this user
+	ws, err := a.wsStore.EnsureDefaultWorkspace(ctx, claims.Email, name)
+	if err != nil {
+		http.Error(w, "Failed to initialize workspace: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	// Ensure default org exists for this user
 	org, err := a.orgStore.EnsureDefaultOrg(ctx, claims.Email, name)
 	if err != nil {
@@ -152,14 +161,22 @@ func (a *OIDCAuthenticator) CallbackHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Associate default org with workspace if not already
+	if org.WorkspaceID == "" {
+		org.WorkspaceID = ws.ID
+		// Best-effort update; don't block login on failure
+		_ = a.orgStore.UpdateWorkspaceID(ctx, org.ID, ws.ID)
+	}
+
 	// Create session
 	user := &UserSession{
-		UserID:        claims.Sub,
-		Email:         claims.Email,
-		Name:          name,
-		Roles:         roles,
-		ActiveOrgID:   org.ID,
-		Authenticated: true,
+		UserID:            claims.Sub,
+		Email:             claims.Email,
+		Name:              name,
+		Roles:             roles,
+		ActiveWorkspaceID: ws.ID,
+		ActiveOrgID:       org.ID,
+		Authenticated:     true,
 	}
 
 	if err := a.sessions.SetUser(w, r, user); err != nil {

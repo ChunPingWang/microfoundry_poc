@@ -151,7 +151,7 @@ func (s *Server) CreateOrgHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store := s.orgStore()
-	org, err := store.Create(r.Context(), name, user.Email)
+	org, err := store.Create(r.Context(), name, user.Email, user.ActiveWorkspaceID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -338,13 +338,87 @@ func (s *Server) APICreateOrgHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store := s.orgStore()
-	org, err := store.Create(r.Context(), body.Name, user.Email)
+	org, err := store.Create(r.Context(), body.Name, user.Email, user.ActiveWorkspaceID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, org)
+}
+
+func (s *Server) APIDeleteOrgHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	orgID := r.PathValue("id")
+	store := s.orgStore()
+
+	if err := store.Delete(r.Context(), orgID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) APIAddMemberHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	orgID := r.PathValue("id")
+	var body struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+		Role  string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if body.Email == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email is required"})
+		return
+	}
+	if body.Name == "" {
+		body.Name = body.Email
+	}
+	if body.Role == "" {
+		body.Role = "member"
+	}
+
+	store := s.orgStore()
+	if err := store.AddMember(r.Context(), orgID, body.Email, body.Name, body.Role); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"status": "added"})
+}
+
+func (s *Server) APIRemoveMemberHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	orgID := r.PathValue("id")
+	email := r.PathValue("email")
+
+	store := s.orgStore()
+	if err := store.RemoveMember(r.Context(), orgID, email); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) APIListMembersHandler(w http.ResponseWriter, r *http.Request) {

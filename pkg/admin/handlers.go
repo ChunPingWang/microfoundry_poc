@@ -55,7 +55,7 @@ func (s *Server) DashboardHandler(w http.ResponseWriter, r *http.Request) {
 
 	apps, _ := client.ListApps(ctx)
 
-	data := s.pageData("Dashboard", "dashboard")
+	data := s.pageDataWithUser(r, "Dashboard", "dashboard")
 	data.Content = map[string]any{
 		"AppCount":  len(apps),
 		"Domain":    client.Domain,
@@ -90,7 +90,7 @@ func (s *Server) AppsListHandler(w http.ResponseWriter, r *http.Request) {
 				filtered = append(filtered, item)
 			}
 		}
-		data := s.pageData("Applications", "apps")
+		data := s.pageDataWithUser(r, "Applications", "apps")
 		data.Content = map[string]any{
 			"Apps":   filtered,
 			"Filter": filter,
@@ -99,7 +99,7 @@ func (s *Server) AppsListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := s.pageData("Applications", "apps")
+	data := s.pageDataWithUser(r, "Applications", "apps")
 	data.Content = map[string]any{
 		"Apps":   items,
 		"Filter": "all",
@@ -202,7 +202,7 @@ func (s *Server) AppDetailHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := s.pageData(name, "apps")
+	data := s.pageDataWithUser(r, name, "apps")
 	data.Content = content
 	s.templates.Render(w, "app_detail.html", data)
 }
@@ -324,25 +324,50 @@ func (s *Server) ScaleAppHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 
-	instancesStr := r.FormValue("instances")
-	instances, err := strconv.Atoi(instancesStr)
-	if err != nil || instances < 0 || instances > 20 {
-		http.Error(w, "instances must be between 0 and 20", http.StatusBadRequest)
-		return
-	}
-
 	client, err := s.getClient(r)
 	if err != nil {
 		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 
-	if err := client.ScaleApp(ctx, name, instances); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	// Handle instance scaling
+	if instancesStr := r.FormValue("instances"); instancesStr != "" {
+		instances, err := strconv.Atoi(instancesStr)
+		if err != nil || instances < 0 || instances > 20 {
+			http.Error(w, "instances must be between 0 and 20", http.StatusBadRequest)
+			return
+		}
+		if err := client.ScaleApp(ctx, name, instances); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.metrics.ScaleEvents.WithLabelValues(s.clientManager.GetActive(), name).Inc()
 	}
 
-	s.metrics.ScaleEvents.WithLabelValues(s.clientManager.GetActive(), name).Inc()
+	// Handle memory/disk resource update
+	memStr := r.FormValue("memory_mb")
+	diskStr := r.FormValue("disk_mb")
+	if memStr != "" || diskStr != "" {
+		var memMB, diskMB int
+		if memStr != "" {
+			memMB, err = strconv.Atoi(memStr)
+			if err != nil || memMB < 64 || memMB > 8192 {
+				http.Error(w, "memory must be between 64 and 8192 MB", http.StatusBadRequest)
+				return
+			}
+		}
+		if diskStr != "" {
+			diskMB, err = strconv.Atoi(diskStr)
+			if err != nil || diskMB < 256 || diskMB > 8192 {
+				http.Error(w, "disk must be between 256 and 8192 MB", http.StatusBadRequest)
+				return
+			}
+		}
+		if err := client.UpdateAppResources(ctx, name, memMB, diskMB); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 
 	// Return updated app row via ListAppItems
 	items, _ := client.ListAppItems(ctx)
@@ -385,7 +410,7 @@ func (s *Server) ConfigHandler(w http.ResponseWriter, r *http.Request) {
 		namespace = client.Namespace
 	}
 
-	data := s.pageData("Configuration", "config")
+	data := s.pageDataWithUser(r, "Configuration", "config")
 	data.Content = map[string]any{
 		"Domain":    domain,
 		"Namespace": namespace,
@@ -395,6 +420,12 @@ func (s *Server) ConfigHandler(w http.ResponseWriter, r *http.Request) {
 		"Repo":      s.config.GitHub.Repo,
 	}
 	s.templates.Render(w, "config.html", data)
+}
+
+// DeniedHandler renders the access denied page.
+func (s *Server) DeniedHandler(w http.ResponseWriter, r *http.Request) {
+	data := s.pageDataWithUser(r, "Access Denied", "")
+	s.templates.Render(w, "denied.html", data)
 }
 
 // UsersHandler is now replaced by OrgsPageHandler in org_handlers.go

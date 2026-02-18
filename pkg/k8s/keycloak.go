@@ -44,7 +44,7 @@ func (c *Client) DeployKeycloak(ctx context.Context, adminUser, adminPass string
 					Containers: []corev1.Container{{
 						Name:  keycloakName,
 						Image: keycloakImage,
-						Args:  []string{"start-dev", "--http-port=8180"},
+						Args:  []string{"start-dev", "--http-port=8180", "--health-enabled=true"},
 						Ports: []corev1.ContainerPort{{
 							ContainerPort: int32(keycloakPort),
 							Protocol:      corev1.ProtocolTCP,
@@ -70,7 +70,7 @@ func (c *Client) DeployKeycloak(ctx context.Context, adminUser, adminPass string
 							ProbeHandler: corev1.ProbeHandler{
 								HTTPGet: &corev1.HTTPGetAction{
 									Path: "/health/ready",
-									Port: intstr.FromInt32(int32(keycloakPort)),
+									Port: intstr.FromInt32(9000),
 								},
 							},
 							InitialDelaySeconds: 30,

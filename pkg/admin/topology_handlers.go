@@ -30,7 +30,7 @@ func (s *Server) TopologiesListHandler(w http.ResponseWriter, r *http.Request) {
 		items = []models.TopologyListItem{}
 	}
 
-	data := s.pageData("Service Topologies", "topologies")
+	data := s.pageDataWithUser(r,"Service Topologies", "topologies")
 	data.Content = map[string]any{
 		"Items":              items,
 		"TerraformAvailable": terraform.IsAvailable(),
@@ -75,7 +75,7 @@ func (s *Server) TopologyDetailHandler(w http.ResponseWriter, r *http.Request) {
 		content["Files"] = topo.Files
 	}
 
-	data := s.pageData(serviceType+"/"+planID, "catalog")
+	data := s.pageDataWithUser(r,serviceType+"/"+planID, "catalog")
 	data.Content = content
 	s.templates.Render(w, "topology_detail.html", data)
 }
@@ -231,7 +231,7 @@ func (s *Server) TopologyPreviewHandler(w http.ResponseWriter, r *http.Request) 
 
 // TopologyUploadHandler shows the upload form.
 func (s *Server) TopologyUploadHandler(w http.ResponseWriter, r *http.Request) {
-	data := s.pageData("Upload Topology", "catalog")
+	data := s.pageDataWithUser(r,"Upload Topology", "catalog")
 	data.Content = map[string]any{
 		"ServiceTypes": service.Catalog(),
 	}

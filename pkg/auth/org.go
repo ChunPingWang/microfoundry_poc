@@ -21,11 +21,12 @@ const (
 
 // Organization represents a multi-tenant org in MicroFoundry.
 type Organization struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	OwnerEmail string `json:"owner_email"`
-	CreatedAt  string `json:"created_at"`
-	Namespace  string `json:"namespace"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	OwnerEmail  string `json:"owner_email"`
+	CreatedAt   string `json:"created_at"`
+	Namespace   string `json:"namespace"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
 }
 
 // OrgMember represents a user's membership in an organization.
@@ -86,16 +87,40 @@ func (s *OrgStore) Get(ctx context.Context, orgID string) (*Organization, error)
 	return &org, nil
 }
 
+// UpdateWorkspaceID sets the workspace association for an existing organization.
+func (s *OrgStore) UpdateWorkspaceID(ctx context.Context, orgID, workspaceID string) error {
+	cm, err := s.clientset.CoreV1().ConfigMaps(s.namespace).Get(ctx, orgPrefix+orgID, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("getting org %q: %w", orgID, err)
+	}
+
+	var org Organization
+	if err := json.Unmarshal([]byte(cm.Data["metadata"]), &org); err != nil {
+		return err
+	}
+
+	org.WorkspaceID = workspaceID
+	data, _ := json.Marshal(org)
+	cm.Data["metadata"] = string(data)
+
+	if _, err := s.clientset.CoreV1().ConfigMaps(s.namespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("updating org workspace: %w", err)
+	}
+	return nil
+}
+
 // Create creates a new organization and its K8s namespace.
-func (s *OrgStore) Create(ctx context.Context, name, ownerEmail string) (*Organization, error) {
+// workspaceID is optional; when non-empty the org is associated with a workspace.
+func (s *OrgStore) Create(ctx context.Context, name, ownerEmail, workspaceID string) (*Organization, error) {
 	id := sanitizeID(name)
 
 	org := Organization{
-		ID:         id,
-		Name:       name,
-		OwnerEmail: ownerEmail,
-		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
-		Namespace:  "mf-" + id,
+		ID:          id,
+		Name:        name,
+		OwnerEmail:  ownerEmail,
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+		Namespace:   "mf-" + id,
+		WorkspaceID: workspaceID,
 	}
 
 	orgData, _ := json.Marshal(org)
@@ -328,7 +353,23 @@ func (s *OrgStore) EnsureDefaultOrg(ctx context.Context, email, name string) (*O
 		orgName = email[:idx]
 	}
 
-	return s.Create(ctx, orgName, email)
+	return s.Create(ctx, orgName, email, "")
+}
+
+// ListByWorkspace returns all organizations belonging to a workspace.
+func (s *OrgStore) ListByWorkspace(ctx context.Context, workspaceID string) ([]Organization, error) {
+	allOrgs, err := s.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []Organization
+	for _, org := range allOrgs {
+		if org.WorkspaceID == workspaceID {
+			filtered = append(filtered, org)
+		}
+	}
+	return filtered, nil
 }
 
 // sanitizeID converts a name to a valid K8s resource name fragment.

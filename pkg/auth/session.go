@@ -13,12 +13,13 @@ const sessionName = "mf-session"
 
 // UserSession represents the authenticated user's session data.
 type UserSession struct {
-	UserID        string   `json:"user_id"`
-	Email         string   `json:"email"`
-	Name          string   `json:"name"`
-	Roles         []string `json:"roles"`
-	ActiveOrgID   string   `json:"active_org"`
-	Authenticated bool     `json:"authenticated"`
+	UserID            string   `json:"user_id"`
+	Email             string   `json:"email"`
+	Name              string   `json:"name"`
+	Roles             []string `json:"roles"`
+	ActiveWorkspaceID string   `json:"active_workspace"`
+	ActiveOrgID       string   `json:"active_org"`
+	Authenticated     bool     `json:"authenticated"`
 }
 
 // SessionManager wraps gorilla/sessions for secure cookie management.
@@ -113,6 +114,16 @@ func (sm *SessionManager) GetOAuthState(r *http.Request) (state, verifier string
 	s, _ := session.Values["oauth_state"].(string)
 	v, _ := session.Values["pkce_verifier"].(string)
 	return s, v
+}
+
+// SetActiveWorkspace updates the active workspace in the session.
+func (sm *SessionManager) SetActiveWorkspace(w http.ResponseWriter, r *http.Request, wsID string) error {
+	user, err := sm.GetUser(r)
+	if err != nil || user == nil {
+		return err
+	}
+	user.ActiveWorkspaceID = wsID
+	return sm.SetUser(w, r, user)
 }
 
 // SetActiveOrg updates the active org in the session.

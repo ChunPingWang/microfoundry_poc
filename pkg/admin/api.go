@@ -73,14 +73,12 @@ func (s *Server) APIScaleAppHandler(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
 	var body struct {
-		Instances int `json:"instances"`
+		Instances *int `json:"instances,omitempty"`
+		MemoryMB  *int `json:"memory_mb,omitempty"`
+		DiskMB    *int `json:"disk_mb,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
-		return
-	}
-	if body.Instances < 0 || body.Instances > 20 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "instances must be between 0 and 20"})
 		return
 	}
 
@@ -90,16 +88,50 @@ func (s *Server) APIScaleAppHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := client.ScaleApp(ctx, name, body.Instances); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+	result := map[string]any{"name": name}
+
+	// Scale instances if provided
+	if body.Instances != nil {
+		if *body.Instances < 0 || *body.Instances > 20 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "instances must be between 0 and 20"})
+			return
+		}
+		if err := client.ScaleApp(ctx, name, *body.Instances); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		result["instances"] = *body.Instances
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"name":      name,
-		"instances": body.Instances,
-		"scaled":    true,
-	})
+	// Update memory/disk if provided
+	memMB := 0
+	diskMB := 0
+	if body.MemoryMB != nil {
+		if *body.MemoryMB < 64 || *body.MemoryMB > 8192 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "memory_mb must be between 64 and 8192"})
+			return
+		}
+		memMB = *body.MemoryMB
+		result["memory_mb"] = memMB
+	}
+	if body.DiskMB != nil {
+		if *body.DiskMB < 256 || *body.DiskMB > 8192 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "disk_mb must be between 256 and 8192"})
+			return
+		}
+		diskMB = *body.DiskMB
+		result["disk_mb"] = diskMB
+	}
+	if memMB > 0 || diskMB > 0 {
+		if err := client.UpdateAppResources(ctx, name, memMB, diskMB); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		result["restarting"] = true
+	}
+
+	result["scaled"] = true
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) APIDeleteAppHandler(w http.ResponseWriter, r *http.Request) {

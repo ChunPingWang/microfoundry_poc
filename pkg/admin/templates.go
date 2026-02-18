@@ -132,6 +132,14 @@ func templateFuncs() template.FuncMap {
 			}
 			return fmt.Sprintf("%.2fs", seconds)
 		},
+		"hasRole": func(roles []string, target string) bool {
+			for _, r := range roles {
+				if r == target {
+					return true
+				}
+			}
+			return false
+		},
 	}
 }
 
@@ -176,6 +184,8 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"settings_smtp.html",
 		"settings_endpoints.html",
 		"login.html",
+		"denied.html",
+		"workspaces.html",
 	}
 
 	pages := make(map[string]*template.Template, len(pageFiles)+3)
