@@ -89,6 +89,13 @@ func (s *Store) DeleteWebhook(ctx context.Context, id string) error {
 	})
 }
 
+// SaveEndpoints saves service endpoint URL overrides to the ConfigMap.
+func (s *Store) SaveEndpoints(ctx context.Context, cfg models.EndpointsConfig) error {
+	return s.update(ctx, func(settings *models.PlatformSettings) {
+		settings.Endpoints = cfg
+	})
+}
+
 // GetCredential retrieves a single credential from the platform Secret.
 func (s *Store) GetCredential(ctx context.Context, key string) (string, error) {
 	secAPI := s.k8sClient.Clientset.CoreV1().Secrets(s.k8sClient.Namespace)

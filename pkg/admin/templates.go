@@ -174,6 +174,7 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"settings_registry.html",
 		"settings_webhooks.html",
 		"settings_smtp.html",
+		"settings_endpoints.html",
 		"login.html",
 	}
 

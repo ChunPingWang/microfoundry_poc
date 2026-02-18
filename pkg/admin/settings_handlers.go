@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/younjinjeong/microfoundry/pkg/k8s"
 	"github.com/younjinjeong/microfoundry/pkg/models"
 	"github.com/younjinjeong/microfoundry/pkg/settings"
 )
@@ -452,6 +453,216 @@ func (s *Server) APISaveSMTPHandler(w http.ResponseWriter, r *http.Request) {
 	if err := store.SaveSMTP(r.Context(), body.SMTPConfig, body.Password); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// --- Service Endpoints ---
+
+// EndpointsSettingsHandler renders the service endpoints configuration page.
+func (s *Server) EndpointsSettingsHandler(w http.ResponseWriter, r *http.Request) {
+	store, err := s.settingsStore(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx := r.Context()
+	ps, _ := store.Get(ctx)
+	endpoints := client.DiscoverPlatformServices(ctx, client.Domain, ps.Endpoints.Overrides)
+
+	data := s.pageData("Service Endpoints", "settings-endpoints")
+	data.Content = map[string]any{
+		"Endpoints": endpoints,
+		"Domain":    client.Domain,
+		"Saved":     r.URL.Query().Get("saved") == "true",
+	}
+	s.templates.Render(w, "settings_endpoints.html", data)
+}
+
+// SaveEndpointsHandler persists endpoint URL overrides and hot-swaps monitoring clients.
+func (s *Server) SaveEndpointsHandler(w http.ResponseWriter, r *http.Request) {
+	store, err := s.settingsStore(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	overrides := make(map[string]string)
+	for _, svc := range models.PlatformServices {
+		if url := r.FormValue("url_" + svc.Name); url != "" {
+			overrides[svc.Name] = url
+		}
+	}
+
+	cfg := models.EndpointsConfig{Overrides: overrides}
+	if err := store.SaveEndpoints(r.Context(), cfg); err != nil {
+		http.Error(w, "Failed to save: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Re-discover and update in-memory monitoring clients
+	endpoints := client.DiscoverPlatformServices(r.Context(), client.Domain, overrides)
+	s.UpdateEndpointURLs(endpoints)
+
+	http.Redirect(w, r, "/settings/endpoints?saved=true", http.StatusSeeOther)
+}
+
+// CreateEndpointIngressHandler creates an ingress for a platform service.
+func (s *Server) CreateEndpointIngressHandler(w http.ResponseWriter, r *http.Request) {
+	serviceName := r.PathValue("name")
+
+	client, err := s.getClient(r)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `<span class="text-red-600">No cluster: %s</span>`, err)
+		return
+	}
+
+	// Find the service definition
+	var svc *models.ServiceEndpoint
+	for i := range models.PlatformServices {
+		if models.PlatformServices[i].Name == serviceName {
+			svc = &models.PlatformServices[i]
+			break
+		}
+	}
+	if svc == nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `<span class="text-red-600">Unknown service</span>`)
+		return
+	}
+
+	ctx := r.Context()
+	ns := svc.Namespace
+	if ns == "" {
+		ns = client.Namespace
+	}
+
+	// For services in a different namespace, create a scoped client
+	targetClient := client
+	if ns != client.Namespace {
+		targetClient = &k8s.Client{
+			Clientset: client.Clientset,
+			Namespace: ns,
+			Domain:    client.Domain,
+			Gateway:   client.Gateway,
+		}
+	}
+
+	if err := targetClient.CreateSystemIngress(ctx, svc.Name, client.Domain, svc.ServicePort); err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `<span class="text-red-600">Failed: %s</span>`, err)
+		return
+	}
+
+	host := fmt.Sprintf("%s.%s", svc.Name, client.Domain)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Ingress: %s</span>`, host)
+}
+
+// TestEndpointHandler tests connectivity to a service endpoint.
+func (s *Server) TestEndpointHandler(w http.ResponseWriter, r *http.Request) {
+	serviceName := r.PathValue("name")
+	if err := r.ParseForm(); err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `<span class="text-red-600">Invalid form data</span>`)
+		return
+	}
+
+	testURL := r.FormValue("url")
+	if testURL == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `<span class="text-yellow-600">No URL to test</span>`)
+		return
+	}
+
+	// Find health path for this service
+	healthPath := "/"
+	for _, svc := range models.PlatformServices {
+		if svc.Name == serviceName {
+			healthPath = svc.HealthPath
+			break
+		}
+	}
+
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	resp, err := httpClient.Get(testURL + healthPath)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err != nil {
+		fmt.Fprintf(w, `<span class="text-red-600">Failed: %s</span>`, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		fmt.Fprint(w, `<span class="text-green-600">Connected</span>`)
+	} else {
+		fmt.Fprintf(w, `<span class="text-yellow-600">Reachable but HTTP %d</span>`, resp.StatusCode)
+	}
+}
+
+// APIGetEndpointsHandler returns discovered endpoints as JSON.
+func (s *Server) APIGetEndpointsHandler(w http.ResponseWriter, r *http.Request) {
+	store, err := s.settingsStore(r)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+
+	client, err := s.getClient(r)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+
+	ps, _ := store.Get(r.Context())
+	endpoints := client.DiscoverPlatformServices(r.Context(), client.Domain, ps.Endpoints.Overrides)
+	writeJSON(w, http.StatusOK, endpoints)
+}
+
+// APISaveEndpointsHandler saves endpoint overrides from JSON body.
+func (s *Server) APISaveEndpointsHandler(w http.ResponseWriter, r *http.Request) {
+	store, err := s.settingsStore(r)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var body models.EndpointsConfig
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+
+	if err := store.SaveEndpoints(r.Context(), body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Update in-memory URLs
+	client, _ := s.getClient(r)
+	if client != nil {
+		endpoints := client.DiscoverPlatformServices(r.Context(), client.Domain, body.Overrides)
+		s.UpdateEndpointURLs(endpoints)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
