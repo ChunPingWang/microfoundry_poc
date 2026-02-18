@@ -31,6 +31,10 @@ admin:
   port: 8080
   host: "0.0.0.0"
 
+# Admin UI feature toggles
+ui:
+  tooltips: true  # Show contextual help tooltips on hover (disable with false)
+
 monitoring:
   grafana_url: "http://localhost:3000"  # Use https://grafana.cf-local.dev after `mf setup tls`
   loki_url: "http://loki.monitoring.svc.cluster.local:3100"
