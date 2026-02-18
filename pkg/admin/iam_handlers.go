@@ -14,10 +14,11 @@ func (s *Server) IAMTabHandler(w http.ResponseWriter, r *http.Request) {
 	tab := r.PathValue("tab")
 
 	validIAMTabs := map[string]string{
-		"orgs":     "tab_iam_orgs.html",
-		"users":    "tab_iam_users.html",
-		"policies": "tab_iam_policies.html",
-		"audit":    "tab_iam_audit.html",
+		"workspaces": "tab_iam_workspaces.html",
+		"orgs":       "tab_iam_orgs.html",
+		"users":      "tab_iam_users.html",
+		"policies":   "tab_iam_policies.html",
+		"audit":      "tab_iam_audit.html",
 	}
 
 	templateName, ok := validIAMTabs[tab]
@@ -27,6 +28,8 @@ func (s *Server) IAMTabHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch tab {
+	case "workspaces":
+		s.renderIAMWorkspacesTab(w, r)
 	case "orgs":
 		s.renderIAMOrgsTab(w, r)
 	case "users":
@@ -36,6 +39,245 @@ func (s *Server) IAMTabHandler(w http.ResponseWriter, r *http.Request) {
 	case "audit":
 		s.renderIAMAuditTab(w, r, templateName)
 	}
+}
+
+// renderIAMWorkspacesTab renders the workspaces tab content.
+func (s *Server) renderIAMWorkspacesTab(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	data := map[string]any{}
+
+	if user != nil {
+		store := s.wsStore
+		if store == nil {
+			data["Error"] = "Workspace store not available"
+			s.templates.RenderPartial(w, "tab_iam_workspaces.html", data)
+			return
+		}
+
+		ctx := r.Context()
+		workspaces, err := store.GetUserWorkspaces(ctx, user.Email)
+		if err != nil {
+			log.Printf("[IAM] failed to get user workspaces for %s: %v", user.Email, err)
+			data["Error"] = "Failed to load workspaces"
+		}
+
+		// Platform admins see all workspaces
+		for _, role := range user.Roles {
+			if role == "platform-admin" {
+				workspaces, err = store.List(ctx)
+				if err != nil {
+					log.Printf("[IAM] failed to list all workspaces: %v", err)
+				}
+				break
+			}
+		}
+
+		selectedWS := r.URL.Query().Get("ws")
+		if selectedWS == "" && len(workspaces) > 0 {
+			selectedWS = workspaces[0].ID
+		}
+
+		data["Workspaces"] = workspaces
+		data["SelectedWS"] = selectedWS
+		data["ActiveWS"] = user.ActiveWorkspaceID
+		data["User"] = user
+
+		if selectedWS != "" {
+			wsDetail, err := store.Get(ctx, selectedWS)
+			if err == nil {
+				data["WSDetail"] = wsDetail
+				members, err := store.ListMembers(ctx, selectedWS)
+				if err != nil {
+					log.Printf("[IAM] failed to list members for ws %s: %v", selectedWS, err)
+				}
+				data["Members"] = members
+
+				// List orgs in this workspace
+				if s.orgStore_ != nil {
+					orgs, err := s.orgStore_.ListByWorkspace(ctx, selectedWS)
+					if err != nil {
+						log.Printf("[IAM] failed to list orgs for ws %s: %v", selectedWS, err)
+					}
+					data["Orgs"] = orgs
+				}
+
+				userRole := "viewer"
+				for _, m := range members {
+					if m.Email == user.Email {
+						userRole = m.Role
+						break
+					}
+				}
+				data["UserRole"] = userRole
+			}
+		}
+	}
+
+	s.templates.RenderPartial(w, "tab_iam_workspaces.html", data)
+}
+
+// --- IAM Workspace CRUD handlers (redirect back to /users?tab=workspaces) ---
+
+// IAMCreateWorkspaceHandler creates a workspace and redirects to the workspaces tab.
+func (s *Server) IAMCreateWorkspaceHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.wsStore == nil {
+		http.Error(w, "Workspace store not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	name := r.FormValue("name")
+	if name == "" {
+		http.Error(w, "Workspace name is required", http.StatusBadRequest)
+		return
+	}
+
+	ws, err := s.wsStore.Create(r.Context(), name, user.Email)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/users?tab=workspaces&ws="+ws.ID, http.StatusSeeOther)
+}
+
+// IAMDeleteWorkspaceHandler deletes a workspace and redirects to the workspaces tab.
+func (s *Server) IAMDeleteWorkspaceHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.wsStore == nil {
+		http.Error(w, "Workspace store not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	wsID := r.PathValue("id")
+	if err := s.wsStore.Delete(r.Context(), wsID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("HX-Redirect", "/users?tab=workspaces")
+	w.WriteHeader(http.StatusOK)
+}
+
+// IAMInviteWorkspaceMemberHandler adds a member to a workspace.
+func (s *Server) IAMInviteWorkspaceMemberHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.wsStore == nil {
+		http.Error(w, "Workspace store not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	wsID := r.PathValue("id")
+	email := r.FormValue("email")
+	name := r.FormValue("name")
+	role := r.FormValue("role")
+
+	if email == "" {
+		http.Error(w, "Email is required", http.StatusBadRequest)
+		return
+	}
+	if name == "" {
+		name = email
+	}
+	if role == "" {
+		role = "member"
+	}
+
+	if err := s.wsStore.AddMember(r.Context(), wsID, email, name, role); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/users?tab=workspaces&ws="+wsID, http.StatusSeeOther)
+}
+
+// IAMRemoveWorkspaceMemberHandler removes a member from a workspace.
+func (s *Server) IAMRemoveWorkspaceMemberHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.wsStore == nil {
+		http.Error(w, "Workspace store not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	wsID := r.PathValue("id")
+	email := r.PathValue("email")
+
+	if err := s.wsStore.RemoveMember(r.Context(), wsID, email); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// IAMSetWorkspaceMemberRoleHandler changes a workspace member's role.
+func (s *Server) IAMSetWorkspaceMemberRoleHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.wsStore == nil {
+		http.Error(w, "Workspace store not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	wsID := r.PathValue("id")
+	email := r.PathValue("email")
+	role := r.FormValue("role")
+
+	validRoles := map[string]bool{"admin": true, "member": true, "viewer": true}
+	if !validRoles[role] {
+		http.Error(w, "Invalid role", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.wsStore.SetMemberRole(r.Context(), wsID, email, role); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/users?tab=workspaces&ws="+wsID, http.StatusSeeOther)
+}
+
+// IAMSwitchWorkspaceHandler sets the active workspace.
+func (s *Server) IAMSwitchWorkspaceHandler(w http.ResponseWriter, r *http.Request) {
+	if s.sessions == nil {
+		http.Error(w, "Auth not enabled", http.StatusBadRequest)
+		return
+	}
+
+	wsID := r.PathValue("id")
+	if err := s.sessions.SetActiveWorkspace(w, r, wsID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Also set the first org in this workspace as active org
+	if s.orgStore_ != nil {
+		orgs, err := s.orgStore_.ListByWorkspace(r.Context(), wsID)
+		if err == nil && len(orgs) > 0 {
+			_ = s.sessions.SetActiveOrg(w, r, orgs[0].ID)
+		}
+	}
+
+	http.Redirect(w, r, "/users?tab=workspaces&ws="+wsID, http.StatusSeeOther)
 }
 
 // renderIAMOrgsTab renders the organizations tab content.
