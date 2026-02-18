@@ -54,11 +54,57 @@ type SMTPConfig struct {
 	Enabled  bool   `json:"enabled"   mapstructure:"enabled"`
 }
 
+// ServiceEndpoint holds the resolved configuration for a single platform service.
+type ServiceEndpoint struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Namespace   string `json:"namespace"`
+	ServiceName string `json:"service_name"`
+	ServicePort int32  `json:"service_port"`
+	HealthPath  string `json:"health_path"`
+	InternalURL string `json:"internal_url"`
+	IngressHost string `json:"ingress_host,omitempty"`
+	OverrideURL string `json:"override_url,omitempty"`
+	HasIngress  bool   `json:"has_ingress"`
+}
+
+// ResolvedURL returns the effective URL for this endpoint.
+// Priority: OverrideURL > IngressHost (https) > InternalURL.
+func (e *ServiceEndpoint) ResolvedURL() string {
+	if e.OverrideURL != "" {
+		return e.OverrideURL
+	}
+	if e.IngressHost != "" {
+		return "https://" + e.IngressHost
+	}
+	return e.InternalURL
+}
+
+// EndpointsConfig holds user-provided URL overrides for platform services.
+type EndpointsConfig struct {
+	Overrides map[string]string `json:"overrides,omitempty"`
+}
+
+// PlatformServices defines the well-known platform services that MicroFoundry manages.
+var PlatformServices = []ServiceEndpoint{
+	{Name: "grafana", DisplayName: "Grafana", Namespace: "monitoring",
+		ServiceName: "kube-prometheus-grafana", ServicePort: 80, HealthPath: "/api/health"},
+	{Name: "prometheus", DisplayName: "Prometheus", Namespace: "monitoring",
+		ServiceName: "kube-prometheus-kube-prome-prometheus", ServicePort: 9090, HealthPath: "/-/healthy"},
+	{Name: "alertmanager", DisplayName: "Alertmanager", Namespace: "monitoring",
+		ServiceName: "kube-prometheus-kube-prome-alertmanager", ServicePort: 9093, HealthPath: "/-/healthy"},
+	{Name: "loki", DisplayName: "Loki", Namespace: "monitoring",
+		ServiceName: "loki", ServicePort: 3100, HealthPath: "/ready"},
+	{Name: "keycloak", DisplayName: "Keycloak", Namespace: "",
+		ServiceName: "keycloak", ServicePort: 8180, HealthPath: "/health/ready"},
+}
+
 // PlatformSettings is the aggregate of all platform settings stored in ConfigMap.
 type PlatformSettings struct {
-	Registry RegistryConfig  `json:"registry"`
-	Webhooks []WebhookConfig `json:"webhooks"`
-	SMTP     SMTPConfig      `json:"smtp"`
+	Registry  RegistryConfig  `json:"registry"`
+	Webhooks  []WebhookConfig `json:"webhooks"`
+	SMTP      SMTPConfig      `json:"smtp"`
+	Endpoints EndpointsConfig `json:"endpoints,omitempty"`
 }
 
 // WebhookEventTypes lists all supported event types for webhook subscriptions.

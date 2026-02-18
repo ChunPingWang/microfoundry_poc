@@ -1,0 +1,113 @@
+{{define "settings_endpoints.html"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+{{$c := .Content}}
+<div class="max-w-3xl mx-auto">
+    {{if index $c "Saved"}}
+    <div class="mb-6 rounded-md bg-green-50 p-4 border border-green-200">
+        <div class="flex">
+            <svg class="h-5 w-5 text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <p class="text-sm font-medium text-green-800">Endpoint settings saved. Monitoring clients updated.</p>
+        </div>
+    </div>
+    {{end}}
+
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Service Endpoints</h3>
+            <p class="mt-1 text-sm text-gray-500">Configure URLs for platform services. The admin server auto-discovers K8s services and ingresses. Override URLs are used when the admin server runs outside the cluster.</p>
+        </div>
+
+        <form action="/settings/endpoints" method="POST" class="p-6 space-y-6">
+            {{range $i, $ep := index $c "Endpoints"}}
+            <div class="border border-gray-200 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-3">
+                        <h4 class="text-sm font-semibold text-gray-900">{{$ep.DisplayName}}</h4>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{$ep.Namespace}}/{{$ep.ServiceName}}</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <!-- Ingress status -->
+                        <span id="ingress-status-{{$ep.Name}}">
+                        {{if $ep.HasIngress}}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Ingress: {{$ep.IngressHost}}</span>
+                        {{else}}
+                            <button type="button"
+                                    hx-post="/settings/endpoints/{{$ep.Name}}/ingress"
+                                    hx-target="#ingress-status-{{$ep.Name}}"
+                                    hx-swap="innerHTML"
+                                    data-tooltip="Create K8s Ingress route for {{$ep.DisplayName}}" data-tooltip-pos="top"
+                                    class="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded transition-colors">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                Create Ingress
+                            </button>
+                        {{end}}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Resolved URL (read-only) -->
+                <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Resolved URL</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" readonly value="{{$ep.ResolvedURL}}"
+                               class="flex-1 bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm text-gray-600 cursor-default">
+                        <span class="text-xs text-gray-400">
+                            {{if $ep.OverrideURL}}override{{else if $ep.IngressHost}}ingress{{else}}internal{{end}}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Override URL (editable) -->
+                <div class="mb-3">
+                    <label for="url_{{$ep.Name}}" class="block text-xs font-medium text-gray-500 mb-1">Override URL</label>
+                    <input type="text" id="url_{{$ep.Name}}" name="url_{{$ep.Name}}" value="{{$ep.OverrideURL}}"
+                           placeholder="e.g. http://localhost:{{$ep.ServicePort}} or https://{{$ep.Name}}.{{index $c "Domain"}}"
+                           class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <p class="mt-1 text-xs text-gray-400">Leave blank to use auto-discovered URL. Health check: <code class="bg-gray-100 px-1 rounded">{{$ep.HealthPath}}</code></p>
+                </div>
+
+                <!-- Test Connection -->
+                <div class="flex items-center space-x-3">
+                    <button type="button"
+                            hx-post="/settings/endpoints/{{$ep.Name}}/test"
+                            hx-include="#url_{{$ep.Name}}"
+                            hx-vals='{"url": ""}'
+                            hx-target="#test-result-{{$ep.Name}}"
+                            hx-swap="innerHTML"
+                            onclick="this.setAttribute('hx-vals', JSON.stringify({url: document.getElementById('url_{{$ep.Name}}').value || '{{$ep.ResolvedURL}}'})); htmx.process(this);"
+                            data-tooltip="Test connectivity to {{$ep.DisplayName}}" data-tooltip-pos="top"
+                            class="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded transition-colors">
+                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                        Test
+                    </button>
+                    <span id="test-result-{{$ep.Name}}" class="text-xs"></span>
+                </div>
+            </div>
+            {{end}}
+
+            <!-- Actions -->
+            <div class="flex items-center space-x-3 pt-2">
+                <button type="submit"
+                        data-tooltip="Save endpoint overrides and update monitoring clients" data-tooltip-pos="top"
+                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors">
+                    Save Endpoint Settings
+                </button>
+                <a href="/config"
+                   data-tooltip="Return without saving" data-tooltip-pos="top"
+                   class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

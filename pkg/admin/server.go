@@ -1,14 +1,19 @@
 package admin
 
 import (
+	"context"
+	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/younjinjeong/microfoundry/pkg/auth"
 	"github.com/younjinjeong/microfoundry/pkg/config"
 	"github.com/younjinjeong/microfoundry/pkg/k8s"
+	"github.com/younjinjeong/microfoundry/pkg/models"
 	"github.com/younjinjeong/microfoundry/pkg/monitoring"
+	"github.com/younjinjeong/microfoundry/pkg/settings"
 )
 
 type Server struct {
@@ -36,6 +41,8 @@ type Server struct {
 	// Admin domain (e.g., "admin.cf-local.dev")
 	adminDomain string
 	tlsEnabled  bool
+	// Endpoint URL hot-swap
+	endpointMu sync.RWMutex
 }
 
 // ServerOption configures optional Server features.
@@ -123,6 +130,7 @@ func NewServer(clientManager *k8s.ClientManager, cfg *config.Config, version str
 	}
 
 	s.registerRoutes()
+	go s.initEndpointsFromK8s()
 	return s
 }
 
@@ -138,6 +146,47 @@ func (s *Server) getClient(r *http.Request) (*k8s.Client, error) {
 		return s.clientManager.GetClient(cookie.Value)
 	}
 	return s.clientManager.GetActiveClient()
+}
+
+// UpdateEndpointURLs updates monitoring client BaseURLs from discovered endpoints.
+func (s *Server) UpdateEndpointURLs(endpoints []models.ServiceEndpoint) {
+	s.endpointMu.Lock()
+	defer s.endpointMu.Unlock()
+	for _, ep := range endpoints {
+		url := ep.ResolvedURL()
+		if url == "" {
+			continue
+		}
+		switch ep.Name {
+		case "grafana":
+			s.grafana.BaseURL = url
+		case "loki":
+			s.loki.BaseURL = url
+		case "alertmanager":
+			s.alertmanager.BaseURL = url
+		case "prometheus":
+			s.prometheus.BaseURL = url
+		}
+	}
+}
+
+// initEndpointsFromK8s resolves platform service endpoints from K8s on startup.
+func (s *Server) initEndpointsFromK8s() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := s.clientManager.GetActiveClient()
+	if err != nil {
+		log.Printf("endpoint discovery: no active client: %v", err)
+		return
+	}
+
+	store := settings.NewStore(client)
+	ps, _ := store.Get(ctx)
+
+	endpoints := client.DiscoverPlatformServices(ctx, client.Domain, ps.Endpoints.Overrides)
+	s.UpdateEndpointURLs(endpoints)
+	log.Printf("endpoint discovery: resolved %d platform services", len(endpoints))
 }
 
 // authEnabled returns true if OIDC authentication is configured.
@@ -216,6 +265,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /settings/smtp", s.SMTPSettingsHandler)
 	s.mux.HandleFunc("POST /settings/smtp", s.SaveSMTPHandler)
 	s.mux.HandleFunc("POST /settings/smtp/test", s.TestSMTPHandler)
+	// Settings routes — Service Endpoints
+	s.mux.HandleFunc("GET /settings/endpoints", s.EndpointsSettingsHandler)
+	s.mux.HandleFunc("POST /settings/endpoints", s.SaveEndpointsHandler)
+	s.mux.HandleFunc("POST /settings/endpoints/{name}/ingress", s.CreateEndpointIngressHandler)
+	s.mux.HandleFunc("POST /settings/endpoints/{name}/test", s.TestEndpointHandler)
 
 	// Catalog visibility routes
 	s.mux.HandleFunc("POST /catalog/{type}/{plan}/visibility", s.TogglePlanVisibilityHandler)
@@ -277,6 +331,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/settings/webhooks", s.APICreateWebhookHandler)
 	s.mux.HandleFunc("DELETE /api/settings/webhooks/{id}", s.APIDeleteWebhookHandler)
 	s.mux.HandleFunc("PUT /api/settings/smtp", s.APISaveSMTPHandler)
+	s.mux.HandleFunc("GET /api/settings/endpoints", s.APIGetEndpointsHandler)
+	s.mux.HandleFunc("PUT /api/settings/endpoints", s.APISaveEndpointsHandler)
 
 	// Org API routes
 	s.mux.HandleFunc("GET /api/orgs", s.APIListOrgsHandler)
