@@ -149,10 +149,16 @@ func (s *Server) getClient(r *http.Request) (*k8s.Client, error) {
 }
 
 // UpdateEndpointURLs updates monitoring client BaseURLs from discovered endpoints.
+// Only overrides config-file URLs when an explicit override or ingress is found;
+// internal cluster DNS is not used because the admin server runs on the host.
 func (s *Server) UpdateEndpointURLs(endpoints []models.ServiceEndpoint) {
 	s.endpointMu.Lock()
 	defer s.endpointMu.Unlock()
 	for _, ep := range endpoints {
+		// Preserve config-file URLs unless there's a better alternative
+		if ep.OverrideURL == "" && !ep.HasIngress {
+			continue
+		}
 		url := ep.ResolvedURL()
 		if url == "" {
 			continue
@@ -186,7 +192,14 @@ func (s *Server) initEndpointsFromK8s() {
 
 	endpoints := client.DiscoverPlatformServices(ctx, client.Domain, ps.Endpoints.Overrides)
 	s.UpdateEndpointURLs(endpoints)
-	log.Printf("endpoint discovery: resolved %d platform services", len(endpoints))
+	active := 0
+	for _, ep := range endpoints {
+		if ep.OverrideURL != "" || ep.HasIngress {
+			active++
+			log.Printf("endpoint discovery: %s → %s", ep.Name, ep.ResolvedURL())
+		}
+	}
+	log.Printf("endpoint discovery: %d/%d services have overrides or ingresses (others use config-file URLs)", active, len(endpoints))
 }
 
 // authEnabled returns true if OIDC authentication is configured.
