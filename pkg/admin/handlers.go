@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/younjinjeong/microfoundry/pkg/auth"
+	"github.com/younjinjeong/microfoundry/pkg/models"
 	"github.com/younjinjeong/microfoundry/pkg/monitoring"
+	"github.com/younjinjeong/microfoundry/pkg/service"
 )
 
 // PageData is the base data passed to every full-page template.
@@ -179,6 +181,26 @@ func (s *Server) AppDetailHandler(w http.ResponseWriter, r *http.Request) {
 			"GrafanaLogPanelURL":     s.grafana.PanelURL(dashboardAppUID, 5, appParams),
 		}
 	}
+	if tab == "services" {
+		mgr := service.NewManager(client)
+		allServices, _ := mgr.List(ctx)
+		boundNames := make(map[string]bool)
+		for _, svc := range detail.Services {
+			boundNames[svc.Name] = true
+		}
+		var available []models.ServiceListItem
+		for _, svc := range allServices {
+			if svc.Status == models.ServiceStatusAvailable && !boundNames[svc.Name] {
+				available = append(available, svc)
+			}
+		}
+		content["ServicesData"] = map[string]any{
+			"AppName":           name,
+			"Services":          detail.Services,
+			"Secrets":           detail.Secrets,
+			"AvailableServices": available,
+		}
+	}
 
 	data := s.pageData(name, "apps")
 	data.Content = content
@@ -241,6 +263,33 @@ func (s *Server) AppTabHandler(w http.ResponseWriter, r *http.Request) {
 			"GrafanaLogPanelURL":     s.grafana.PanelURL(dashboardAppUID, 5, appParams),
 		}
 		s.templates.RenderPartial(w, "tab_metrics.html", metricsData)
+		return
+	}
+
+	// Services tab needs available service instances for bind UI
+	if tab == "services" {
+		mgr := service.NewManager(client)
+		allServices, _ := mgr.List(ctx)
+
+		// Filter to only available (not already bound to this app)
+		boundNames := make(map[string]bool)
+		for _, svc := range detail.Services {
+			boundNames[svc.Name] = true
+		}
+		var available []models.ServiceListItem
+		for _, svc := range allServices {
+			if svc.Status == models.ServiceStatusAvailable && !boundNames[svc.Name] {
+				available = append(available, svc)
+			}
+		}
+
+		svcData := map[string]any{
+			"AppName":           name,
+			"Services":          detail.Services,
+			"Secrets":           detail.Secrets,
+			"AvailableServices": available,
+		}
+		s.templates.RenderPartial(w, "tab_services.html", svcData)
 		return
 	}
 

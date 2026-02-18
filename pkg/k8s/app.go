@@ -282,10 +282,10 @@ func (c *Client) GetAppStatus(ctx context.Context, name string) (*models.AppStat
 	return status, nil
 }
 
-// ListApps returns all MicroFoundry-managed deployments.
+// ListApps returns all MicroFoundry-managed application deployments (excludes backing services).
 func (c *Client) ListApps(ctx context.Context) ([]string, error) {
 	deps, err := c.Clientset.AppsV1().Deployments(c.Namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "app.kubernetes.io/managed-by=" + labelManagedBy,
+		LabelSelector: "app.kubernetes.io/managed-by=" + labelManagedBy + ",microfoundry.io/component!=backing-service",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listing apps: %w", err)
@@ -453,10 +453,10 @@ func (c *Client) GetAppDetail(ctx context.Context, name string) (*models.AppDeta
 	return detail, nil
 }
 
-// ListAppItems returns enriched app list items from K8s deployments.
+// ListAppItems returns enriched app list items from K8s deployments (excludes backing services).
 func (c *Client) ListAppItems(ctx context.Context) ([]models.AppListItem, error) {
 	deps, err := c.Clientset.AppsV1().Deployments(c.Namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "app.kubernetes.io/managed-by=" + labelManagedBy,
+		LabelSelector: "app.kubernetes.io/managed-by=" + labelManagedBy + ",microfoundry.io/component!=backing-service",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listing apps: %w", err)

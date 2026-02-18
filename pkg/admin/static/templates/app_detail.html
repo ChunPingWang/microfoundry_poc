@@ -94,6 +94,23 @@
                 </a>
             </nav>
         </div>
+        <script>
+            (function() {
+                var nav = document.querySelector('nav[aria-label="Tabs"]');
+                var activeClass = 'border-blue-600 text-blue-600';
+                var inactiveClass = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
+                nav.addEventListener('click', function(e) {
+                    var link = e.target.closest('a');
+                    if (!link) return;
+                    nav.querySelectorAll('a').forEach(function(a) {
+                        activeClass.split(' ').forEach(function(c) { a.classList.remove(c); });
+                        inactiveClass.split(' ').forEach(function(c) { a.classList.add(c); });
+                    });
+                    inactiveClass.split(' ').forEach(function(c) { link.classList.remove(c); });
+                    activeClass.split(' ').forEach(function(c) { link.classList.add(c); });
+                });
+            })();
+        </script>
 
         <!-- Tab Content -->
         <div id="tab-content" class="p-6">
@@ -104,7 +121,7 @@
             {{else if eq $tab "config"}}
                 {{template "tab_config.html" $d}}
             {{else if eq $tab "services"}}
-                {{template "tab_services.html" $d}}
+                {{template "tab_services.html" (index $c "ServicesData")}}
             {{else if eq $tab "routes"}}
                 {{template "tab_routes.html" $d}}
             {{else if eq $tab "logs"}}
