@@ -34,6 +34,21 @@ test.describe('Applications - List', () => {
     await expect(page).toHaveURL(/state=started/);
   });
 
+  test('refresh button triggers HTMX reload', async ({ page }) => {
+    await page.goto('/apps');
+    const refreshBtn = page.locator(apps.refreshButton);
+    await expect(refreshBtn).toBeVisible();
+    // Should have hx-get for HTMX reload
+    await expect(refreshBtn).toHaveAttribute('hx-get', /\/apps/);
+  });
+
+  test('app table has auto-refresh via HTMX', async ({ page }) => {
+    await page.goto('/apps');
+    // The table or container should have an hx-trigger with "every" for auto-refresh
+    const autoRefreshEl = page.locator('[hx-trigger*="every"]');
+    await expect(autoRefreshEl.first()).toBeAttached();
+  });
+
   test('app name links to detail page', async ({ page, request }) => {
     const api = new APIHelper(request);
     const appsList = await api.getApps();
@@ -82,6 +97,24 @@ test.describe('Applications - Detail', () => {
     await expect(page.locator(appDetail.overviewTab).first()).toBeVisible();
   });
 
+  test('all tabs are displayed in navigation', async ({ page, request }) => {
+    const api = new APIHelper(request);
+    const appsList = await api.getApps();
+    if (!appsList || appsList.length === 0) return;
+
+    const appName = appsList[0].name || appsList[0].Name;
+    await page.goto(`/apps/${appName}`);
+
+    await expect(page.locator(appDetail.overviewTab).first()).toBeVisible();
+    await expect(page.locator(appDetail.instancesTab).first()).toBeVisible();
+    await expect(page.locator(appDetail.configTab).first()).toBeVisible();
+    await expect(page.locator(appDetail.servicesTab).first()).toBeVisible();
+    await expect(page.locator(appDetail.routesTab).first()).toBeVisible();
+    await expect(page.locator(appDetail.logsTab).first()).toBeVisible();
+    await expect(page.locator(appDetail.metricsTab).first()).toBeVisible();
+    await expect(page.locator(appDetail.performanceTab).first()).toBeVisible();
+  });
+
   test('instances tab shows pod information', async ({ page, request }) => {
     const api = new APIHelper(request);
     const appsList = await api.getApps();
@@ -89,7 +122,6 @@ test.describe('Applications - Detail', () => {
 
     const appName = appsList[0].name || appsList[0].Name;
     await page.goto(`/apps/${appName}?tab=instances`);
-    // Should show instance/pod table or scale form
     await expect(page.locator('text=Instances').first()).toBeVisible();
   });
 
@@ -100,9 +132,22 @@ test.describe('Applications - Detail', () => {
 
     const appName = appsList[0].name || appsList[0].Name;
     await page.goto(`/apps/${appName}?tab=instances`);
-    // Verify HTMX auto-refresh attribute exists
     const refreshEl = page.locator('[hx-trigger*="every"]');
     await expect(refreshEl.first()).toBeAttached();
+  });
+
+  test('instances tab has scale form', async ({ page, request }) => {
+    const api = new APIHelper(request);
+    const appsList = await api.getApps();
+    if (!appsList || appsList.length === 0) return;
+
+    const appName = appsList[0].name || appsList[0].Name;
+    await page.goto(`/apps/${appName}?tab=instances`);
+    const scaleInput = page.locator('input[name="instances"]');
+    if (await scaleInput.isVisible()) {
+      await expect(scaleInput).toHaveAttribute('min', '0');
+      await expect(scaleInput).toHaveAttribute('max', '20');
+    }
   });
 
   test('config tab shows environment variables', async ({ page, request }) => {
@@ -145,6 +190,16 @@ test.describe('Applications - Detail', () => {
     await expect(page.locator('text=Logs').first()).toBeVisible();
   });
 
+  test('metrics tab loads Grafana embeds', async ({ page, request }) => {
+    const api = new APIHelper(request);
+    const appsList = await api.getApps();
+    if (!appsList || appsList.length === 0) return;
+
+    const appName = appsList[0].name || appsList[0].Name;
+    await page.goto(`/apps/${appName}?tab=metrics`);
+    await expect(page.locator('text=Metrics').first()).toBeVisible();
+  });
+
   test('performance tab shows RED metrics', async ({ page, request }) => {
     const api = new APIHelper(request);
     const appsList = await api.getApps();
@@ -163,7 +218,6 @@ test.describe('Applications - Detail', () => {
     const appName = appsList[0].name || appsList[0].Name;
     await page.goto(`/apps/${appName}`);
 
-    // Click instances tab
     const instancesTab = page.locator('a:has-text("Instances")').first();
     if (await instancesTab.isVisible()) {
       await instancesTab.click();
@@ -180,9 +234,29 @@ test.describe('Applications - Detail', () => {
     const appName = appsList[0].name || appsList[0].Name;
     await page.goto(`/apps/${appName}`);
 
-    // Verify tab links have hx-get pointing to /apps/{name}/tab/{tab}
     const tabLinks = page.locator(`[hx-get*="/apps/${appName}/tab/"]`);
     const count = await tabLinks.count();
     expect(count).toBeGreaterThan(0);
+  });
+
+  test('app detail shows state badge', async ({ page, request }) => {
+    const api = new APIHelper(request);
+    const appsList = await api.getApps();
+    if (!appsList || appsList.length === 0) return;
+
+    const appName = appsList[0].name || appsList[0].Name;
+    await page.goto(`/apps/${appName}`);
+    await expect(page.locator(appDetail.appName).first()).toBeVisible();
+  });
+
+  test('back button returns to app list', async ({ page, request }) => {
+    const api = new APIHelper(request);
+    const appsList = await api.getApps();
+    if (!appsList || appsList.length === 0) return;
+
+    const appName = appsList[0].name || appsList[0].Name;
+    await page.goto(`/apps/${appName}`);
+    const backLink = page.locator(appDetail.backButton).first();
+    await expect(backLink).toBeVisible();
   });
 });

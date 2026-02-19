@@ -8,14 +8,40 @@ MicroFoundry replaces the heavyweight BOSH/Diego runtime with Kubernetes, manage
 
 ---
 
+## Why MicroFoundry?
+
+| Problem | MicroFoundry Solution |
+|---|---|
+| **CF is too heavy** — BOSH + Diego + 20+ VMs just to run apps | **Single Go binary** on any Kubernetes cluster — laptop to cloud |
+| **Losing CF developer experience** when migrating to K8s | **`mf push` works like `cf push`** — same workflow, K8s underneath |
+| **Observability requires code changes** — instrumenting every app | **Zero-code eBPF metrics** — Grafana Beyla auto-instruments all HTTP traffic |
+| **No visibility into platform state** without multiple tools | **Built-in admin dashboard** — apps, services, secrets, IAM, monitoring in one UI |
+| **IAM is bolted on** — separate systems for auth, authz, provisioning | **Integrated Keycloak + OPA + SCIM v2** — authentication, authorization, and user provisioning in one stack |
+| **Multi-cluster is hard** — different tools per cloud provider | **One control plane** — Docker Desktop, EKS, GKE, AKS from a single `mf` binary |
+
+### Core Benefits
+
+- **5-minute setup** — `make build && mf push` from zero to deployed app with monitoring
+- **CF-compatible CLI** — 25+ commands mirror CloudFoundry (`mf push`, `mf bind-service`, `mf logs`)
+- **10 backing services** — MariaDB, PostgreSQL, Redis, RabbitMQ, MinIO, and more with real K8s provisioning (StatefulSet + PVC)
+- **Production-ready IAM** — Keycloak OIDC, 5-tier RBAC (platform → workspace → org → member → viewer), OPA Rego policies, SCIM v2
+- **Admin dashboard with no JS build step** — Go templates + HTMX + Tailwind CSS, 14+ pages, all server-rendered
+- **AI-native** — MCP Server lets Claude, Cursor, and other AI tools deploy and manage apps directly
+- **Cross-platform release** — GoReleaser builds for Linux/macOS/Windows on amd64/arm64, multi-arch Docker images, Helm chart as OCI artifact
+- **Cloud deployment packages** — Terraform blueprints for AWS EKS, AWS ECS Fargate, GCP GKE, Azure AKS, and local K8s
+
+---
+
 ## Highlights
 
 - **`mf push`** — Build and deploy from source (Dockerfile or Cloud Native Buildpacks)
 - **10 backing services** — MariaDB, PostgreSQL, Redis, RabbitMQ, MinIO, Kong, and more with real K8s provisioning
 - **Zero-code observability** — Grafana Beyla eBPF auto-instruments all HTTP traffic for RED metrics
 - **Multi-cluster** — Manage Docker Desktop, EKS, GKE, AKS clusters from a single control plane
-- **Admin Dashboard** — Full-featured web UI with HTMX (no JS build step)
-- **Keycloak IAM** — OIDC authentication, SCIM v2 provisioning, OPA authorization
+- **Admin Dashboard** — Full-featured web UI with HTMX (no JS build step), 14+ pages
+- **Keycloak IAM** — OIDC authentication, SCIM v2 provisioning, OPA authorization, 5-tier RBAC
+- **Workspace hierarchy** — Platform → Workspace → Organization → Member → Viewer role-based access
+- **Pluggable gateway** — Kong, Nginx, Traefik, or AWS API Gateway with WebSocket/gRPC/HTTP3 support
 - **MCP Server** — AI tools can deploy, scale, and manage apps via Model Context Protocol
 - **Single binary** — One Go binary, no external dependencies beyond Kubernetes
 
@@ -38,27 +64,41 @@ The built-in admin dashboard (`mf admin`, default `:8080`) provides a complete p
 | <img src="docs/images/dashboard.png" alt="Dashboard" width="280"> | <img src="docs/images/apps-list.png" alt="Applications" width="280"> | <img src="docs/images/catalog.png" alt="Catalog" width="280"> |
 | Platform stats, quick links | App state, instances, routes | 10 service types, 3 plans each |
 
-| Clusters | Monitoring & Alerts | Secrets |
-|:--------:|:-------------------:|:-------:|
-| <img src="docs/images/clusters.png" alt="Clusters" width="280"> | <img src="docs/images/monitoring.png" alt="Monitoring" width="280"> | <img src="docs/images/secrets.png" alt="Secrets" width="280"> |
-| Multi-cluster management | Prometheus alerts, Grafana | Service & user-defined secrets |
+| Users & IAM | Workspaces | Clusters |
+|:-----------:|:----------:|:--------:|
+| <img src="docs/images/users-iam.png" alt="Users & IAM" width="280"> | <img src="docs/images/workspaces.png" alt="Workspaces" width="280"> | <img src="docs/images/clusters.png" alt="Clusters" width="280"> |
+| Keycloak OIDC, OPA, SCIM v2 | Workspace hierarchy & RBAC | Multi-cluster management |
 
-| Users & IAM | Platform Settings | Services |
-|:-----------:|:-----------------:|:--------:|
-| <img src="docs/images/users-iam.png" alt="Users & IAM" width="280"> | <img src="docs/images/settings.png" alt="Settings" width="280"> | <img src="docs/images/services.png" alt="Services" width="280"> |
-| Keycloak OIDC, OPA, SCIM v2 | Registry, Webhooks, SMTP | Provisioned backing services |
+| Monitoring & Alerts | Services | Secrets |
+|:-------------------:|:--------:|:-------:|
+| <img src="docs/images/monitoring.png" alt="Monitoring" width="280"> | <img src="docs/images/services.png" alt="Services" width="280"> | <img src="docs/images/secrets.png" alt="Secrets" width="280"> |
+| Prometheus alerts, Grafana | Provisioned backing services | Service & user-defined secrets |
+
+| Service Endpoints | Registry Settings | Platform Config |
+|:-----------------:|:-----------------:|:---------------:|
+| <img src="docs/images/settings-endpoints.png" alt="Endpoints" width="280"> | <img src="docs/images/settings-registry.png" alt="Registry" width="280"> | <img src="docs/images/config.png" alt="Config" width="280"> |
+| Auto-discovery + override URLs | Container registry config | Domain, namespace, routing |
 
 </details>
 
-**Key pages:**
+**Admin pages (super admin view):**
+
+**Operations:**
 - **Dashboard** — Platform stats (apps, domain, namespace, K8s context) with quick links
 - **Applications** — Deploy, scale, delete apps with 8-tab detail view (Overview, Instances, Config, Services, Routes, Logs, Metrics, Performance)
-- **Service Catalog** — Browse 10 service types by category with plan visibility and Terraform topology editor
-- **Clusters** — Register and switch between Docker Desktop, EKS, GKE, AKS clusters
-- **Monitoring** — Prometheus alerts + embedded Grafana dashboards with Beyla eBPF auto-instrumentation
+- **Services** — Provisioned backing services with bind/unbind from app detail
 - **Secrets** — Service secrets (auto-created) and user-defined key-value pairs with reveal toggle
-- **Users & IAM** — Keycloak user management, organizations, OPA Rego policies, audit log
-- **Settings** — Container registry, webhooks, SMTP configuration stored in K8s
+
+**Settings (platform-admin only):**
+- **Users & Orgs** — 5-tab IAM: Workspaces, Organizations, Users (Keycloak CRUD), OPA Policies, Audit Log
+- **Clusters** — Register and switch between Docker Desktop, EKS, GKE, AKS clusters
+- **Service Catalog** — Browse 10 service types by category with plan visibility and Terraform topology editor
+- **Registry** — Container registry configuration (Harbor, ECR) with connection testing
+- **Webhooks** — HTTP webhook configuration for platform events
+- **SMTP** — Email notification server configuration
+- **Endpoints** — Auto-discovered service URLs (Prometheus, Loki, Grafana, AlertManager) with override
+- **Metrics & Alerts** — Prometheus alerts + embedded Grafana dashboards with Beyla eBPF auto-instrumentation
+- **Platform** — Platform-wide configuration and routing view
 
 ---
 
@@ -142,6 +182,24 @@ The built-in admin dashboard (`mf admin`, default `:8080`) provides a complete p
 | **CF CLI** | `mf` CLI (Cobra) | 20+ commands mirroring CF CLI |
 | **— (new)** | MCP Server | AI tool integration via Model Context Protocol |
 
+### CloudFoundry vs MicroFoundry at a Glance
+
+| Metric | Cloud Foundry | MicroFoundry |
+|--------|--------------|--------------|
+| **Deployment** | 40-80+ BOSH-managed VMs | 1 container on any K8s cluster |
+| **Languages** | Ruby, Go, Java | Go only |
+| **Components** | 12+ distinct systems (Diego, CC, UAA, Gorouter, NATS, Loggregator...) | 1 binary, 21 Go packages |
+| **Install time** | Hours (BOSH deploy) | Minutes (Helm install) |
+| **State storage** | PostgreSQL/MySQL (8 databases) | Kubernetes objects (ConfigMaps, Secrets) |
+| **Monitoring** | Requires external nozzle integration | Integrated (Prometheus/Grafana/Loki/Beyla eBPF) |
+| **Admin UI** | Apps Manager (commercial, Tanzu only) | Built-in open-source dashboard (43 templates) |
+| **Authorization** | Hardcoded roles in Ruby CC | OPA Rego policies (editable at runtime) |
+| **Cloud providers** | BOSH CPI per IaaS | Terraform modules (AWS EKS, ECS Fargate, GCP GKE, Azure AKS) |
+
+> **~80% of Cloud Foundry's developer experience with ~1% of the operational complexity.**
+
+For the full architectural comparison covering all 10 component areas, CLI parity, deployment models, and design trade-offs, see [CloudFoundry vs MicroFoundry](docs/cloudfoundry-vs-microfoundry.md).
+
 ---
 
 ## Developer Experience
@@ -165,10 +223,15 @@ The built-in admin dashboard (`mf admin`, default `:8080`) provides a complete p
 | `mf secrets` | — | List managed secrets |
 | `mf create-secret <name> k=v...` | — | Create user-defined secret |
 | `mf delete-secret <name>` | — | Delete a secret |
-| `mf admin` | — | Start web dashboard (:8080) |
+| `mf admin` | — | Start web dashboard (:8080) with optional TLS |
 | `mf setup keycloak` | — | Deploy Keycloak for authentication |
 | `mf setup keycloak-realm` | — | Configure Keycloak realm and client |
 | `mf setup keycloak-idp` | — | Add identity provider (Google, GitHub, Amazon) |
+| `mf users` | — | List Keycloak users |
+| `mf create-user <email>` | — | Create a new user |
+| `mf orgs` | — | List organizations |
+| `mf create-org <name>` | — | Create an organization |
+| `mf auth login` | — | Authenticate via OIDC |
 | `mf version` | — | Print version |
 
 ### MCP Server Tools
@@ -262,11 +325,13 @@ mf setup keycloak-idp \          # Add social login
 
 - **OIDC Authorization Code Flow** with PKCE
 - **Social login**: Google, GitHub, Amazon identity providers
-- **Roles**: platform-admin, org-admin, org-member, viewer
+- **5-tier RBAC**: platform-admin → workspace-admin → org-admin → member → viewer
+- **Workspace hierarchy**: Platform → Workspace → Organization for multi-tenant isolation
 - **Organizations**: Multi-tenant org management with member invitations
 - **OPA Authorization**: Embedded Open Policy Agent with Rego policies
 - **SCIM v2**: Standard identity provisioning endpoints (RFC 7643/7644)
 - **Audit Log**: In-memory ring buffer with resource/action/decision tracking
+- **Role-based UI**: Sidebar adapts to user role — platform-admins see Settings, members see Operations only
 
 ---
 
@@ -343,7 +408,8 @@ kubernetes:
 | **CLI** | Cobra + Viper | Command parsing + configuration |
 | **Runtime** | Kubernetes | Application scheduling and orchestration |
 | **Build** | Cloud Native Buildpacks (Paketo) | Source-to-container builds |
-| **Ingress** | Kong / Nginx | API gateway and routing |
+| **Ingress** | Kong / Nginx / Traefik / AWS API GW | Pluggable API gateway with WebSocket/gRPC support |
+| **TLS** | mkcert | Local .dev HTTPS with auto-generated certificates |
 | **Metrics** | Prometheus + Grafana | Collection and visualization |
 | **Logs** | Promtail + Loki | Aggregation and querying |
 | **Auto-Instrumentation** | Grafana Beyla (eBPF) | Zero-code HTTP metrics |
@@ -363,7 +429,7 @@ kubernetes:
 
 ```
 microfoundry/
-├── cmd/mf/                    # CLI entry points (20+ commands)
+├── cmd/mf/                    # CLI entry points (25+ commands)
 │   ├── main.go                #   root command + version
 │   ├── push.go                #   mf push (build → registry → deploy → ingress → hosts)
 │   ├── apps.go                #   mf apps / mf app
@@ -377,7 +443,10 @@ microfoundry/
 │   ├── unbind_service.go      #   mf unbind-service
 │   ├── delete_service.go      #   mf delete-service
 │   ├── secrets.go             #   mf secrets / mf create-secret / mf delete-secret
-│   ├── admin.go               #   mf admin (web dashboard + auth + OPA init)
+│   ├── users.go               #   mf users / mf create-user (Keycloak user management)
+│   ├── orgs.go                #   mf orgs / mf create-org (organization management)
+│   ├── auth.go                #   mf auth login (OIDC authentication)
+│   ├── admin.go               #   mf admin (web dashboard + auth + OPA init + TLS)
 │   └── setup.go               #   mf setup keycloak / keycloak-realm / keycloak-idp
 │
 ├── pkg/                       # Go packages
@@ -393,14 +462,15 @@ microfoundry/
 │   │   ├── cluster_handlers.go      # Multi-cluster management
 │   │   ├── monitoring_handlers.go   # Alert & monitoring UI
 │   │   ├── secret_handlers.go       # Secret management UI
-│   │   ├── settings_handlers.go     # Registry, webhooks, SMTP config
+│   │   ├── workspace_handlers.go    # Workspace hierarchy management
+│   │   ├── settings_handlers.go     # Registry, webhooks, SMTP, endpoints config
 │   │   ├── topology_handlers.go     # Terraform topology editor
 │   │   ├── logs.go            #     SSE log streaming
 │   │   ├── templates.go       #     Template renderer (clone pattern)
 │   │   └── static/            #     Embedded HTML/CSS/JS templates
-│   │       ├── templates/     #       20+ page templates
+│   │       ├── templates/     #       25+ page templates
 │   │       │   ├── partials/  #       Shared partials (nav, header)
-│   │       │   └── tabs/      #       HTMX tab partials (12 tabs)
+│   │       │   └── tabs/      #       HTMX tab partials (13 tabs)
 │   │       └── css/           #       Tailwind CSS
 │   ├── auth/                  #   Authentication & Authorization
 │   │   ├── oidc.go            #     OIDC authorization code flow with PKCE
@@ -412,6 +482,7 @@ microfoundry/
 │   │   ├── opa_middleware.go  #     OPA HTTP middleware + route classification
 │   │   ├── audit.go           #     Authorization audit log (ring buffer)
 │   │   ├── org.go             #     Organization & member management
+│   │   ├── workspace.go       #     Workspace hierarchy & RBAC
 │   │   ├── middleware.go      #     InjectUser middleware
 │   │   ├── config.go          #     Auth configuration types
 │   │   └── policies/          #     Embedded Rego policies
@@ -419,6 +490,7 @@ microfoundry/
 │   ├── build/                 #   Source-to-image (Dockerfile + CNB + registry push)
 │   ├── config/                #   Multi-cluster configuration (Viper + YAML)
 │   ├── hosts/                 #   /etc/hosts management
+│   ├── tls/                   #   mkcert TLS certificate generation
 │   ├── k8s/                   #   Kubernetes client + operations
 │   │   ├── client.go          #     K8s API client wrapper
 │   │   ├── app.go             #     Deployment/Service/Pod management
@@ -449,16 +521,24 @@ microfoundry/
 │   ├── k8s/                   # Kubernetes manifests
 │   │   ├── base/              #   Base manifests (namespace)
 │   │   └── overlays/          #   Kustomize overlays (local, EKS, GKE, AKS)
-│   └── monitoring/            # Observability stack
-│       ├── install.sh         #   One-command monitoring setup
-│       ├── beyla-config.yaml  #   Beyla eBPF DaemonSet
-│       ├── prometheus-recording-rules.yaml
-│       ├── dashboards/        #   Grafana dashboards
-│       └── alerts/            #   Prometheus alerting rules
+│   ├── monitoring/            # Observability stack
+│   │   ├── install.sh         #   One-command monitoring setup
+│   │   ├── beyla-config.yaml  #   Beyla eBPF DaemonSet
+│   │   ├── prometheus-recording-rules.yaml
+│   │   ├── dashboards/        #   Grafana dashboards
+│   │   └── alerts/            #   Prometheus alerting rules
+│   ├── helm/                  # Helm chart (OCI artifact)
+│   └── csp/                   # Cloud deployment packages
+│       ├── aws-eks/           #   AWS EKS (VPC, EKS, ECR, ALB, CloudWatch)
+│       ├── aws-ecs-fargate/   #   AWS ECS Fargate + EKS worker
+│       ├── gcp-gke/           #   GCP GKE Autopilot/Standard
+│       ├── azure-aks/         #   Azure AKS (VNet, ACR, AGIC)
+│       └── local-k8s/         #   Local K8s (nginx ingress, self-hosted monitoring)
 │
 ├── test/                      # E2E tests (Playwright)
 │   ├── playwright.config.ts   #   Test configuration
-│   ├── e2e/                   #   82 test cases across 8 suites
+│   ├── screenshots.ts         #   Screenshot & walkthrough capture (super admin)
+│   ├── e2e/                   #   82 test cases across 12 suites
 │   └── helpers/               #   Test utilities
 │
 ├── configs/mf.example.yaml   # Example configuration
@@ -466,6 +546,7 @@ microfoundry/
 │   ├── user-manual.md         #   Complete user guide
 │   ├── architecture.md        #   Technical architecture
 │   ├── admin-guide.md         #   Admin dashboard guide
+│   ├── cloudfoundry-vs-microfoundry.md  # CF vs MF comparison
 │   ├── cloudfoundry-architecture.md  # CF reference
 │   └── observability-capacity.md     # Monitoring docs
 ├── Makefile                   # Build targets
@@ -483,6 +564,7 @@ microfoundry/
 | [User Manual](docs/user-manual.md) | Complete guide to deploying and managing applications |
 | [Architecture](docs/architecture.md) | Technical architecture and component design |
 | [Admin Guide](docs/admin-guide.md) | Admin dashboard pages, API reference (100+ endpoints) |
+| [CF vs MF Comparison](docs/cloudfoundry-vs-microfoundry.md) | Side-by-side architectural comparison across 10 component areas |
 | [CF Architecture](docs/cloudfoundry-architecture.md) | CloudFoundry reference architecture |
 | [Observability](docs/observability-capacity.md) | Monitoring stack documentation |
 
@@ -619,12 +701,29 @@ MicroFoundry has been built incrementally through a series of Epics, each adding
 | [#31](https://github.com/younjinjeong/microfoundry/pull/31) | E2E Testing | Playwright E2E test suite (82 test cases, 8 suites) | — |
 | [#34](https://github.com/younjinjeong/microfoundry/pull/34) | IAM & SCIM | Keycloak user CRUD, SCIM v2, OPA authorization, audit log | 22 |
 | [#37](https://github.com/younjinjeong/microfoundry/pull/37) | IAM Hardening | Authz bypass fix, error handling, SCIM compliance, OPA atomicity | 7 |
+| [#40](https://github.com/younjinjeong/microfoundry/pull/40) | Docs Sync #3 | Documentation sync for IAM, SCIM v2, OPA & Audit | — |
+| [#42](https://github.com/younjinjeong/microfoundry/pull/42) | Local TLS | mkcert TLS for `.dev` HTTPS access | — |
+| [#44](https://github.com/younjinjeong/microfoundry/pull/44) | Contextual Tooltips | Tooltips across all admin UI pages | — |
+| [#46](https://github.com/younjinjeong/microfoundry/pull/46) | Admin Domain | Configurable domain name with auto-TLS | — |
+| [#48](https://github.com/younjinjeong/microfoundry/pull/48) | Pluggable Gateway | nginx/kong/traefik/AWS API Gateway support | — |
+| [#50](https://github.com/younjinjeong/microfoundry/pull/50) | Protocol Support | WebSocket and gRPC protocol support for routes | — |
+| [#54](https://github.com/younjinjeong/microfoundry/pull/54) | Service Creation UI | Service creation form + bind/unbind UI | — |
+| [#58](https://github.com/younjinjeong/microfoundry/pull/58) | User/Org CLI | User and organization management CLI commands | — |
+| [#61](https://github.com/younjinjeong/microfoundry/pull/61) | Service Endpoints | Configurable service endpoints with K8s auto-discovery | — |
+| [#64](https://github.com/younjinjeong/microfoundry/pull/64) | Workspace RBAC | Workspace hierarchy, 5-tier RBAC, CLI auth | — |
+| [#65](https://github.com/younjinjeong/microfoundry/pull/65) | Workspace IAM Tab | Workspaces tab in Users & Organizations page | — |
 
 ### External Contributions
 
 | PR | Author | Description |
 |----|--------|-------------|
 | [#29](https://github.com/younjinjeong/microfoundry/pull/29) | [@byunjuneseok](https://github.com/byunjuneseok) | Fix: add EnsureNamespace to create-service command |
+
+### Release
+
+| Version | Tag | Description |
+|---------|-----|-------------|
+| **v0.1.0** | [`v0.1.0`](https://github.com/younjinjeong/microfoundry/releases/tag/v0.1.0) | First release — GoReleaser cross-compilation, multi-arch Docker images, Helm OCI chart, 5 cloud deployment packages |
 
 ---
 

@@ -3,7 +3,7 @@ BUILD_DIR := bin
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 
-.PHONY: all build test lint clean tidy fmt e2e-install e2e e2e-headed e2e-ui e2e-report
+.PHONY: all build test lint clean tidy fmt hooks e2e-install e2e e2e-headed e2e-ui e2e-report
 
 all: tidy fmt build test
 
@@ -24,6 +24,11 @@ tidy:
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+hooks:
+	@command -v pre-commit >/dev/null 2>&1 || { echo "Installing pre-commit..."; pip install pre-commit; }
+	pre-commit install
+	@echo "Pre-commit hooks installed (includes gitleaks secret detection)"
 
 docker-build:
 	docker build -t microfoundry/mf:$(VERSION) .

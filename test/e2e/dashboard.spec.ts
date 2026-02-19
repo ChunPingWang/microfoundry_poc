@@ -27,6 +27,13 @@ test.describe('Dashboard', () => {
     await expect(domainValue).toBeVisible();
   });
 
+  test('stat cards link to their respective pages', async ({ page }) => {
+    await page.goto('/');
+    // Application card links to /apps
+    const appCard = page.locator('a[href="/apps"].bg-white.rounded-lg');
+    await expect(appCard.first()).toBeVisible();
+  });
+
   test('quick action links navigate correctly', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator(dashboard.quickLinks)).toBeVisible();
@@ -50,5 +57,12 @@ test.describe('Dashboard', () => {
     await expect(servicesLink).toBeVisible();
     await servicesLink.click();
     await expect(page).toHaveURL('/services');
+  });
+
+  test('quick links section has three action cards', async ({ page }) => {
+    await page.goto('/');
+    const quickLinksSection = page.locator(dashboard.quickLinks).locator('..');
+    const actionCards = quickLinksSection.locator('a.flex.items-center');
+    await expect(actionCards).toHaveCount(3);
   });
 });

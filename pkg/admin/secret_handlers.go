@@ -42,7 +42,16 @@ func (s *Server) SecretsListHandler(w http.ResponseWriter, r *http.Request) {
 		items = filtered
 	}
 
-	data := s.pageDataWithUser(r,"Secrets Manager", "secrets")
+	// HTMX partial: return only table rows for auto-refresh and filter tabs
+	if r.Header.Get("HX-Request") == "true" {
+		s.templates.RenderPartial(w, "secret_rows.html", map[string]any{
+			"Secrets": items,
+			"Filter":  filter,
+		})
+		return
+	}
+
+	data := s.pageDataWithUser(r, "Secrets Manager", "secrets")
 	data.Content = map[string]any{
 		"Secrets": items,
 		"Filter":  filter,

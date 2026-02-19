@@ -1,10 +1,13 @@
 package admin
 
 import (
+	"bytes"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/yuin/goldmark"
+	"github.com/younjinjeong/microfoundry/docs"
 	"github.com/younjinjeong/microfoundry/pkg/auth"
 	"github.com/younjinjeong/microfoundry/pkg/models"
 	"github.com/younjinjeong/microfoundry/pkg/monitoring"
@@ -46,6 +49,7 @@ func (s *Server) pageDataWithUser(r *http.Request, title, active string) PageDat
 
 func (s *Server) DashboardHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	user := auth.UserFromContext(ctx)
 
 	client, err := s.getClient(r)
 	if err != nil {
@@ -53,17 +57,96 @@ func (s *Server) DashboardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apps, _ := client.ListApps(ctx)
+	// Always fetched: apps and services (2 K8s calls)
+	apps, _ := client.ListAppItems(ctx)
+	svcMgr := service.NewManager(client)
+	services, _ := svcMgr.List(ctx)
+
+	// Compute app state breakdown
+	var appsStarted, appsStopped, appsCrashed int
+	for _, a := range apps {
+		switch a.State {
+		case "STARTED", "started", "running":
+			appsStarted++
+		case "STOPPED", "stopped":
+			appsStopped++
+		case "CRASHED", "crashed", "failed":
+			appsCrashed++
+		}
+	}
+
+	// Pre-slice for dashboard tables
+	topApps := apps
+	if len(topApps) > 8 {
+		topApps = topApps[:8]
+	}
+	topServices := services
+	if len(topServices) > 6 {
+		topServices = topServices[:6]
+	}
+
+	content := map[string]any{
+		"AppCount":         len(apps),
+		"Apps":             apps,
+		"TopApps":          topApps,
+		"AppsStarted":      appsStarted,
+		"AppsStopped":      appsStopped,
+		"AppsCrashed":      appsCrashed,
+		"ServiceCount":     len(services),
+		"TopServices":      topServices,
+		"CatalogTypeCount": len(service.Catalog()),
+		"Domain":           client.Domain,
+		"Namespace":        client.Namespace,
+		"Context":          s.config.Kubernetes.Active,
+		"GitHub":           s.config.GitHub.Owner + "/" + s.config.GitHub.Repo,
+	}
+
+	// Platform-admin only: clusters, alerts, monitoring health, grafana
+	isPlatformAdmin := user != nil && hasRoleSlice(user.Roles, "platform-admin")
+	if isPlatformAdmin {
+		content["Clusters"] = s.clientManager.ListClusters(ctx)
+		alerts, _ := s.alertmanager.ListAlerts(ctx)
+		var firing []monitoring.Alert
+		for _, a := range alerts {
+			if a.Status == "firing" {
+				firing = append(firing, a)
+			}
+		}
+		content["Alerts"] = firing
+		content["FiringCount"] = len(firing)
+		content["MonitoringComponents"] = s.checkMonitoringHealth(ctx)
+		content["GrafanaOverviewURL"] = s.grafana.DashboardURL(dashboardOverviewUID, nil)
+	}
+
+	// Workspace/org counts for admin roles
+	isWSAdmin := user != nil && hasRoleSlice(user.Roles, "workspace-admin")
+	isOrgAdmin := user != nil && hasRoleSlice(user.Roles, "org-admin")
+	if isPlatformAdmin || isWSAdmin {
+		if s.wsStore != nil {
+			ws, _ := s.wsStore.List(ctx)
+			content["WorkspaceCount"] = len(ws)
+		}
+	}
+	if isPlatformAdmin || isWSAdmin || isOrgAdmin {
+		if s.orgStore_ != nil {
+			orgs, _ := s.orgStore_.List(ctx)
+			content["OrgCount"] = len(orgs)
+		}
+	}
 
 	data := s.pageDataWithUser(r, "Dashboard", "dashboard")
-	data.Content = map[string]any{
-		"AppCount":  len(apps),
-		"Domain":    client.Domain,
-		"Namespace": client.Namespace,
-		"Context":   s.config.Kubernetes.Active,
-		"GitHub":    s.config.GitHub.Owner + "/" + s.config.GitHub.Repo,
-	}
+	data.Content = content
 	s.templates.Render(w, "dashboard.html", data)
+}
+
+// hasRoleSlice checks if a slice of roles contains the target role.
+func hasRoleSlice(roles []string, target string) bool {
+	for _, r := range roles {
+		if r == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) AppsListHandler(w http.ResponseWriter, r *http.Request) {
@@ -420,6 +503,45 @@ func (s *Server) ConfigHandler(w http.ResponseWriter, r *http.Request) {
 		"Repo":      s.config.GitHub.Repo,
 	}
 	s.templates.Render(w, "config.html", data)
+}
+
+// DocsHandler renders the in-app documentation page.
+func (s *Server) DocsHandler(w http.ResponseWriter, r *http.Request) {
+	tab := r.URL.Query().Get("tab")
+	if tab == "" {
+		tab = "manual"
+	}
+
+	fileMap := map[string]string{
+		"manual":       "user-manual.md",
+		"admin":        "admin-guide.md",
+		"architecture": "architecture.md",
+	}
+
+	filename, ok := fileMap[tab]
+	if !ok {
+		tab = "manual"
+		filename = "user-manual.md"
+	}
+
+	md, err := docs.Files.ReadFile(filename)
+	if err != nil {
+		http.Error(w, "doc not found: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := goldmark.Convert(md, &buf); err != nil {
+		http.Error(w, "markdown render error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := s.pageDataWithUser(r, "Documentation", "docs")
+	data.Content = map[string]any{
+		"Tab":  tab,
+		"HTML": buf.String(),
+	}
+	s.templates.Render(w, "docs.html", data)
 }
 
 // DeniedHandler renders the access denied page.

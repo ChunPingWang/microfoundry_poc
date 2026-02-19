@@ -36,8 +36,12 @@ Output:
 ```
 Authentication enabled (Keycloak: http://localhost:8180/realms/microfoundry)
 MicroFoundry Admin starting at http://localhost:8080
+Admin domain: admin.cf-local.dev
+TLS enabled: https://admin.cf-local.dev:8443
 Active cluster: docker-desktop
 ```
+
+When TLS is enabled in `mf.yaml`, the admin server automatically generates certificates using mkcert and serves on both HTTP (redirect) and HTTPS.
 
 The dashboard serves both HTML pages (for browser UI) and JSON API endpoints (for programmatic access).
 
@@ -47,27 +51,30 @@ The dashboard serves both HTML pages (for browser UI) and JSON API endpoints (fo
 
 The sidebar organizes all pages into two groups:
 
-### Operations (Daily Use)
+### Operations (All Authenticated Users)
 
 | Page | URL | Description |
 |------|-----|-------------|
 | **Dashboard** | `/` | Platform overview with app count, cluster status |
 | **Applications** | `/apps` | List, deploy, scale, delete applications |
-| **Services** | `/services` | Manage provisioned service instances |
+| **Services** | `/services` | Manage provisioned service instances, bind/unbind |
 | **Secrets** | `/secrets` | View and manage Kubernetes secrets |
-| **Metrics & Alerts** | `/monitoring` | Prometheus alerts, Grafana dashboards |
 
-### Settings (Environment Setup)
+### Settings (Platform-Admin Only)
 
 | Page | URL | Description |
 |------|-----|-------------|
+| **Users & Orgs** | `/users` | 5-tab IAM: Workspaces, Orgs, Users, Policies, Audit |
 | **Clusters** | `/clusters` | Multi-cluster management |
-| **Service Catalog** | `/catalog` | Browse and configure service plans |
+| **Service Catalog** | `/catalog` | Browse and configure service plans, topology editor |
 | **Registry** | `/settings/registry` | Container registry configuration |
 | **Webhooks** | `/settings/webhooks` | Event webhook management |
 | **SMTP** | `/settings/smtp` | Email notification configuration |
-| **Users & Orgs** | `/users` | Organization and member management |
+| **Endpoints** | `/settings/endpoints` | Service endpoint URLs (Prometheus, Loki, Grafana, AlertManager) with auto-discovery |
+| **Metrics & Alerts** | `/monitoring` | Prometheus alerts, Grafana dashboards |
 | **Platform** | `/config` | Platform configuration view |
+
+> **Note:** The sidebar adapts to the authenticated user's role. Platform-admins see the full Settings section. Workspace-admins and org-admins see an IAM link under Operations for managing their own workspace/org members. Regular members see Operations only.
 
 ---
 
@@ -395,7 +402,26 @@ Configure SMTP for email notifications:
 
 **URL**: `/users`
 
-The Users & IAM page provides complete identity and access management through a 4-tab interface. Tabs load dynamically via HTMX (`hx-get="/users/tab/{tab}"`, `hx-target="#tab-content"`, `hx-push-url="/users?tab={tab}"`).
+The Users & IAM page provides complete identity and access management through a 5-tab interface. Tabs load dynamically via HTMX (`hx-get="/users/tab/{tab}"`, `hx-target="#tab-content"`, `hx-push-url="/users?tab={tab}"`).
+
+### Workspaces Tab
+
+**URL**: `/users?tab=workspaces`
+
+Workspace hierarchy management for multi-tenant platform organization:
+
+- **Left panel** — list of workspaces, create workspace form
+- **Right panel** — selected workspace detail, member organizations, members
+
+| Action | Method | URL |
+|--------|--------|-----|
+| Create workspace | POST | `/users/workspaces` |
+| Delete workspace | DELETE | `/users/workspaces/{id}` |
+| Add member | POST | `/users/workspaces/{id}/members` |
+| Remove member | DELETE | `/users/workspaces/{id}/members/{email}` |
+| Switch active | POST | `/users/workspaces/{id}/activate` |
+
+Workspaces group organizations under a common administrative boundary. Roles: **workspace-admin** (manage orgs/members within workspace), **member** (access workspace resources).
 
 ### Orgs Tab
 

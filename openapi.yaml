@@ -1,0 +1,2126 @@
+openapi: 3.0.3
+info:
+  title: MicroFoundry Admin API
+  description: |
+    REST API for the MicroFoundry PaaS platform — a lightweight CloudFoundry-style
+    developer experience built on Kubernetes.
+
+    The API is served by the `mf admin` server (default port 8080) alongside the
+    HTMX-based admin dashboard. All JSON endpoints live under `/api/`.
+
+    **Authentication**: When OIDC is enabled, API requests require a valid session
+    cookie or Bearer token obtained via the `/auth/login` OAuth2 flow. When auth
+    is disabled (default for local dev), all endpoints are publicly accessible.
+  version: 0.1.0
+  contact:
+    name: MicroFoundry
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://admin.cf-local.dev:8443
+    description: Local TLS (with Keycloak)
+
+tags:
+  - name: Applications
+    description: Deploy, scale, and manage containerised applications
+  - name: Services
+    description: Provision and bind backing services (databases, caches, queues)
+  - name: Catalog
+    description: Service catalog — available types, plans, and visibility
+  - name: Secrets
+    description: User-defined and service-generated secrets
+  - name: Clusters
+    description: Multi-cluster Kubernetes management
+  - name: Settings
+    description: Platform settings — registry, webhooks, SMTP, endpoints
+  - name: Monitoring
+    description: Prometheus alerts, Grafana dashboards, component health
+  - name: Config
+    description: Read-only platform configuration
+  - name: Organizations
+    description: Organization management and membership
+  - name: Workspaces
+    description: Workspace hierarchy and membership
+  - name: Users
+    description: Keycloak user lifecycle and role management
+  - name: Policies
+    description: OPA authorization policies
+  - name: Audit
+    description: IAM audit log
+  - name: Topologies
+    description: Terraform topology configurations per service/plan
+  - name: SCIM
+    description: SCIM v2 user provisioning (SSO integration)
+
+paths:
+  # ─── Applications ──────────────────────────────────────────────────────────
+  /api/apps:
+    get:
+      tags: [Applications]
+      summary: List all applications
+      parameters:
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [all, started, stopped]
+          description: Filter by application state
+      responses:
+        "200":
+          description: Array of applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AppListItem"
+
+  /api/apps/{name}:
+    get:
+      tags: [Applications]
+      summary: Get application detail
+      parameters:
+        - $ref: "#/components/parameters/AppName"
+      responses:
+        "200":
+          description: Full application detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Applications]
+      summary: Delete an application
+      parameters:
+        - $ref: "#/components/parameters/AppName"
+      responses:
+        "204":
+          description: Application deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/apps/{name}/scale:
+    post:
+      tags: [Applications]
+      summary: Scale application instances, memory, or disk
+      parameters:
+        - $ref: "#/components/parameters/AppName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                instances:
+                  type: integer
+                  minimum: 0
+                  maximum: 20
+                memory_mb:
+                  type: integer
+                  minimum: 64
+                  maximum: 8192
+                disk_mb:
+                  type: integer
+                  minimum: 256
+                  maximum: 8192
+      responses:
+        "200":
+          description: Scale result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScaleResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/apps/{name}/red-metrics:
+    get:
+      tags: [Applications]
+      summary: Get RED metrics (Rate, Errors, Duration) from Prometheus
+      parameters:
+        - $ref: "#/components/parameters/AppName"
+      responses:
+        "200":
+          description: RED metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/REDMetrics"
+        "503":
+          description: Prometheus unavailable
+
+  /api/apps/{name}/health:
+    get:
+      tags: [Applications]
+      summary: Get application health status combining RED metrics and alerts
+      parameters:
+        - $ref: "#/components/parameters/AppName"
+      responses:
+        "200":
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/apps/{name}/observability:
+    get:
+      tags: [Applications]
+      summary: Combined RED metrics and recent logs
+      parameters:
+        - $ref: "#/components/parameters/AppName"
+        - name: duration
+          in: query
+          schema:
+            type: string
+            default: "15m"
+          description: Log duration window (e.g. 15m, 1h)
+      responses:
+        "200":
+          description: Observability data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/apps/{name}/logs/history:
+    get:
+      tags: [Applications]
+      summary: Get historical log lines from Loki
+      parameters:
+        - $ref: "#/components/parameters/AppName"
+        - name: duration
+          in: query
+          schema:
+            type: string
+            default: "1h"
+      responses:
+        "200":
+          description: Log history
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ─── Services ──────────────────────────────────────────────────────────────
+  /api/services:
+    get:
+      tags: [Services]
+      summary: List provisioned service instances
+      responses:
+        "200":
+          description: Array of service instances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceListItem"
+
+  /api/services/{name}:
+    get:
+      tags: [Services]
+      summary: Get service instance detail (credentials redacted)
+      parameters:
+        - $ref: "#/components/parameters/ServiceName"
+      responses:
+        "200":
+          description: Service instance detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInstance"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Catalog ───────────────────────────────────────────────────────────────
+  /api/catalog:
+    get:
+      tags: [Catalog]
+      summary: Get full service catalog (admin view)
+      responses:
+        "200":
+          description: All service types with plans and visibility
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceType"
+
+  /api/catalog/visible:
+    get:
+      tags: [Catalog]
+      summary: Get user-visible catalog only
+      responses:
+        "200":
+          description: Visible service types and plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceType"
+
+  # ─── Secrets ───────────────────────────────────────────────────────────────
+  /api/secrets:
+    get:
+      tags: [Secrets]
+      summary: List all secrets
+      responses:
+        "200":
+          description: Array of secrets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SecretListItem"
+    post:
+      tags: [Secrets]
+      summary: Create a user-defined secret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, data]
+              properties:
+                name:
+                  type: string
+                  pattern: "^[a-z][a-z0-9-]{0,40}[a-z0-9]$"
+                description:
+                  type: string
+                data:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        "201":
+          description: Secret created
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/secrets/{name}:
+    get:
+      tags: [Secrets]
+      summary: Get secret detail (values redacted)
+      parameters:
+        - $ref: "#/components/parameters/SecretName"
+      responses:
+        "200":
+          description: Secret detail with keys listed but values masked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecretDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Clusters ──────────────────────────────────────────────────────────────
+  /api/clusters:
+    get:
+      tags: [Clusters]
+      summary: List all registered clusters
+      responses:
+        "200":
+          description: Clusters with active indicator
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clusters:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ClusterInfo"
+                  active:
+                    type: string
+                    description: ID of the currently active cluster
+
+  /api/clusters/{id}/health:
+    get:
+      tags: [Clusters]
+      summary: Check cluster health status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cluster health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cluster:
+                    type: string
+                  status:
+                    type: string
+                    enum: [connected, disconnected, error]
+
+  # ─── Config ────────────────────────────────────────────────────────────────
+  /api/config:
+    get:
+      tags: [Config]
+      summary: Get platform configuration (read-only)
+      responses:
+        "200":
+          description: Platform config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformConfig"
+
+  # ─── Settings ──────────────────────────────────────────────────────────────
+  /api/settings:
+    get:
+      tags: [Settings]
+      summary: Get all platform settings (passwords redacted)
+      responses:
+        "200":
+          description: Platform settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformSettings"
+
+  /api/settings/registry:
+    put:
+      tags: [Settings]
+      summary: Save container registry settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistryConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/StatusSaved"
+
+  /api/settings/webhooks:
+    get:
+      tags: [Settings]
+      summary: List configured webhooks
+      responses:
+        "200":
+          description: Webhook list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WebhookConfig"
+    post:
+      tags: [Settings]
+      summary: Create a webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, url]
+              properties:
+                name:
+                  type: string
+                url:
+                  type: string
+                  format: uri
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - app.deployed
+                      - app.crashed
+                      - app.scaled
+                      - app.deleted
+                      - alert.fired
+                      - alert.resolved
+                      - service.created
+                      - service.deleted
+                enabled:
+                  type: boolean
+                  default: true
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookConfig"
+
+  /api/settings/webhooks/{id}:
+    delete:
+      tags: [Settings]
+      summary: Delete a webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Webhook deleted
+
+  /api/settings/smtp:
+    put:
+      tags: [Settings]
+      summary: Save SMTP settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SMTPConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/StatusSaved"
+
+  /api/settings/endpoints:
+    get:
+      tags: [Settings]
+      summary: Get discovered service endpoints
+      responses:
+        "200":
+          description: Endpoint list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceEndpoint"
+    put:
+      tags: [Settings]
+      summary: Save endpoint URL overrides
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                overrides:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/StatusSaved"
+
+  # ─── Monitoring ────────────────────────────────────────────────────────────
+  /api/monitoring/alerts:
+    get:
+      tags: [Monitoring]
+      summary: List active Alertmanager alerts
+      responses:
+        "200":
+          description: Active alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "503":
+          description: Alertmanager unavailable
+
+  /api/monitoring/health:
+    get:
+      tags: [Monitoring]
+      summary: Check monitoring stack component health
+      responses:
+        "200":
+          description: All components healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitoringHealth"
+        "503":
+          description: One or more components unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitoringHealth"
+
+  # ─── Organizations ─────────────────────────────────────────────────────────
+  /api/orgs:
+    get:
+      tags: [Organizations]
+      summary: List user's organizations
+      responses:
+        "200":
+          description: Organization list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Organization"
+    post:
+      tags: [Organizations]
+      summary: Create an organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Organization created
+
+  /api/orgs/{id}:
+    get:
+      tags: [Organizations]
+      summary: Get organization detail with members
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: Organization detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+    delete:
+      tags: [Organizations]
+      summary: Delete an organization
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "204":
+          description: Organization deleted
+
+  /api/orgs/{id}/members:
+    get:
+      tags: [Organizations]
+      summary: List organization members
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: Member list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Member"
+    post:
+      tags: [Organizations]
+      summary: Add a member to the organization
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberInvite"
+      responses:
+        "201":
+          description: Member added
+
+  /api/orgs/{id}/members/{email}:
+    delete:
+      tags: [Organizations]
+      summary: Remove a member from the organization
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - name: email
+          in: path
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        "204":
+          description: Member removed
+
+  # ─── Workspaces ────────────────────────────────────────────────────────────
+  /api/workspaces:
+    get:
+      tags: [Workspaces]
+      summary: List user's workspaces
+      responses:
+        "200":
+          description: Workspace list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workspace"
+    post:
+      tags: [Workspaces]
+      summary: Create a workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Workspace created
+
+  /api/workspaces/{id}:
+    get:
+      tags: [Workspaces]
+      summary: Get workspace detail with members
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceID"
+      responses:
+        "200":
+          description: Workspace detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+    delete:
+      tags: [Workspaces]
+      summary: Delete a workspace
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceID"
+      responses:
+        "204":
+          description: Workspace deleted
+
+  /api/workspaces/{id}/members:
+    get:
+      tags: [Workspaces]
+      summary: List workspace members
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceID"
+      responses:
+        "200":
+          description: Member list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Member"
+    post:
+      tags: [Workspaces]
+      summary: Add a member to the workspace
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberInvite"
+      responses:
+        "201":
+          description: Member added
+
+  /api/workspaces/{id}/members/{email}:
+    delete:
+      tags: [Workspaces]
+      summary: Remove a member from the workspace
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceID"
+        - name: email
+          in: path
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        "204":
+          description: Member removed
+
+  /api/workspaces/{id}/orgs:
+    get:
+      tags: [Workspaces]
+      summary: List organizations in workspace
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceID"
+      responses:
+        "200":
+          description: Organization list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Organization"
+
+  # ─── Users (Keycloak) ─────────────────────────────────────────────────────
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List Keycloak users
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by username or email
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KeycloakUser"
+        "503":
+          description: Keycloak not configured
+    post:
+      tags: [Users]
+      summary: Create a Keycloak user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email]
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      responses:
+        "201":
+          description: User created
+
+  /api/users/{id}:
+    delete:
+      tags: [Users]
+      summary: Delete a Keycloak user
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "204":
+          description: User deleted
+
+  /api/users/{id}/toggle:
+    post:
+      tags: [Users]
+      summary: Toggle user enabled/disabled
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "200":
+          description: User toggled
+
+  /api/users/{id}/roles:
+    post:
+      tags: [Users]
+      summary: Assign a role to user
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id, role_name]
+              properties:
+                role_id:
+                  type: string
+                role_name:
+                  type: string
+      responses:
+        "200":
+          description: Role assigned
+    delete:
+      tags: [Users]
+      summary: Remove a role from user
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id, role_name]
+              properties:
+                role_id:
+                  type: string
+                role_name:
+                  type: string
+      responses:
+        "200":
+          description: Role removed
+
+  /api/users/{id}/password:
+    post:
+      tags: [Users]
+      summary: Reset user password
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  format: password
+                temporary:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Password reset
+
+  # ─── Policies ──────────────────────────────────────────────────────────────
+  /api/policies:
+    get:
+      tags: [Policies]
+      summary: Get OPA authorization policies
+      responses:
+        "200":
+          description: Policy list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OPAPolicy"
+    put:
+      tags: [Policies]
+      summary: Save an OPA policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, source]
+              properties:
+                name:
+                  type: string
+                source:
+                  type: string
+                  description: Rego policy source code
+      responses:
+        "200":
+          $ref: "#/components/responses/StatusSaved"
+
+  # ─── Audit ─────────────────────────────────────────────────────────────────
+  /api/audit:
+    get:
+      tags: [Audit]
+      summary: Get audit log entries
+      parameters:
+        - name: user
+          in: query
+          schema:
+            type: string
+        - name: resource
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEntry"
+
+  # ─── Topologies ────────────────────────────────────────────────────────────
+  /api/topologies:
+    get:
+      tags: [Topologies]
+      summary: List all topology configurations
+      responses:
+        "200":
+          description: Topology list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TopologyListItem"
+
+  /api/topologies/{type}/{plan}:
+    get:
+      tags: [Topologies]
+      summary: Get topology configuration for a service/plan
+      parameters:
+        - $ref: "#/components/parameters/ServiceType"
+        - $ref: "#/components/parameters/PlanID"
+      responses:
+        "200":
+          description: Topology config with Terraform files
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopologyConfig"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Topologies]
+      summary: Save topology configuration
+      parameters:
+        - $ref: "#/components/parameters/ServiceType"
+        - $ref: "#/components/parameters/PlanID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TopologyConfig"
+      responses:
+        "200":
+          $ref: "#/components/responses/StatusSaved"
+
+  # ─── SCIM v2 ───────────────────────────────────────────────────────────────
+  /scim/v2/Users:
+    get:
+      tags: [SCIM]
+      summary: List users (SCIM v2)
+      parameters:
+        - name: filter
+          in: query
+          schema:
+            type: string
+          description: 'SCIM filter (e.g. userName eq "john")'
+        - name: startIndex
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: count
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: SCIM list response
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/SCIMListResponse"
+    post:
+      tags: [SCIM]
+      summary: Create user (SCIM v2)
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/SCIMUser"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/SCIMUser"
+        "409":
+          description: User already exists
+
+  /scim/v2/Users/{id}:
+    get:
+      tags: [SCIM]
+      summary: Get user (SCIM v2)
+      parameters:
+        - $ref: "#/components/parameters/SCIMUserID"
+      responses:
+        "200":
+          description: SCIM user
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/SCIMUser"
+        "404":
+          description: User not found
+    put:
+      tags: [SCIM]
+      summary: Replace user (SCIM v2)
+      parameters:
+        - $ref: "#/components/parameters/SCIMUserID"
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/SCIMUser"
+      responses:
+        "200":
+          description: User replaced
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/SCIMUser"
+    patch:
+      tags: [SCIM]
+      summary: Patch user (SCIM v2)
+      parameters:
+        - $ref: "#/components/parameters/SCIMUserID"
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/SCIMPatchOp"
+      responses:
+        "200":
+          description: User patched
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/SCIMUser"
+    delete:
+      tags: [SCIM]
+      summary: Delete user (SCIM v2)
+      parameters:
+        - $ref: "#/components/parameters/SCIMUserID"
+      responses:
+        "204":
+          description: User deleted
+
+  /scim/v2/ServiceProviderConfig:
+    get:
+      tags: [SCIM]
+      summary: SCIM service provider configuration
+      responses:
+        "200":
+          description: Provider config
+          content:
+            application/scim+json:
+              schema:
+                type: object
+
+  /scim/v2/ResourceTypes:
+    get:
+      tags: [SCIM]
+      summary: SCIM resource types
+      responses:
+        "200":
+          description: Resource types
+          content:
+            application/scim+json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /scim/v2/Schemas:
+    get:
+      tags: [SCIM]
+      summary: SCIM schemas
+      responses:
+        "200":
+          description: Schemas
+          content:
+            application/scim+json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Components
+# ═════════════════════════════════════════════════════════════════════════════
+components:
+  # ─── Parameters ────────────────────────────────────────────────────────────
+  parameters:
+    AppName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Application name
+    ServiceName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Service instance name
+    SecretName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Secret name
+    OrgID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Organization ID
+    WorkspaceID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Workspace ID
+    UserID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Keycloak user ID
+    SCIMUserID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: SCIM user ID
+    ServiceType:
+      name: type
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Service type ID (e.g. mariadb, redis)
+    PlanID:
+      name: plan
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Plan ID (e.g. small, medium, large)
+
+  # ─── Responses ─────────────────────────────────────────────────────────────
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    StatusSaved:
+      description: Settings saved
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: saved
+
+  # ─── Schemas ───────────────────────────────────────────────────────────────
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    # ── Applications ───────────────────────────────────────
+    AppListItem:
+      type: object
+      properties:
+        name:
+          type: string
+        organization:
+          type: string
+        owner:
+          type: string
+        state:
+          type: string
+          enum: [STARTED, STOPPED, UPLOADING, STAGING, DEPLOYING, FAILED]
+        lifecycle_type:
+          type: string
+          enum: [buildpack, docker, cnb]
+        running_count:
+          type: integer
+        total_count:
+          type: integer
+        memory_mb:
+          type: integer
+        routes:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+
+    AppDetail:
+      type: object
+      properties:
+        name:
+          type: string
+        guid:
+          type: string
+        state:
+          type: string
+          enum: [STARTED, STOPPED, UPLOADING, STAGING, DEPLOYING, FAILED]
+        organization:
+          type: string
+        owner:
+          type: string
+        lifecycle_type:
+          type: string
+          enum: [buildpack, docker, cnb]
+        buildpacks:
+          type: array
+          items:
+            type: string
+        image_ref:
+          type: string
+        image_digest:
+          type: string
+        command:
+          type: string
+        instances:
+          type: integer
+        running_count:
+          type: integer
+        memory_mb:
+          type: integer
+        disk_mb:
+          type: integer
+        cpu_millis:
+          type: integer
+        port:
+          type: integer
+        health_check:
+          $ref: "#/components/schemas/HealthCheck"
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteDetail"
+        env:
+          type: object
+          additionalProperties:
+            type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        annotations:
+          type: object
+          additionalProperties:
+            type: string
+        services:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceBindingInfo"
+        secrets:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecretInfo"
+        instance_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstanceStatus"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    HealthCheck:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [http, port, process]
+        endpoint:
+          type: string
+        timeout:
+          type: integer
+
+    RouteDetail:
+      type: object
+      properties:
+        host:
+          type: string
+        domain:
+          type: string
+        path:
+          type: string
+        url:
+          type: string
+        protocol:
+          type: string
+
+    InstanceStatus:
+      type: object
+      properties:
+        index:
+          type: integer
+        state:
+          type: string
+        since:
+          type: string
+          format: date-time
+        cpu:
+          type: number
+        memory_mb:
+          type: integer
+        disk_mb:
+          type: integer
+        restart_count:
+          type: integer
+        node_name:
+          type: string
+        pod_name:
+          type: string
+        image_id:
+          type: string
+
+    ScaleResult:
+      type: object
+      properties:
+        name:
+          type: string
+        instances:
+          type: integer
+        memory_mb:
+          type: integer
+        disk_mb:
+          type: integer
+        restarting:
+          type: boolean
+        scaled:
+          type: boolean
+
+    REDMetrics:
+      type: object
+      properties:
+        request_rate:
+          type: number
+          description: Requests per second
+        error_rate:
+          type: number
+          description: Errors per second
+        latency_p50:
+          type: number
+          description: 50th percentile latency (seconds)
+        latency_p95:
+          type: number
+          description: 95th percentile latency (seconds)
+        latency_p99:
+          type: number
+          description: 99th percentile latency (seconds)
+        has_data:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+
+    # ── Services ───────────────────────────────────────────
+    ServiceListItem:
+      type: object
+      properties:
+        name:
+          type: string
+        service_type:
+          type: string
+        plan:
+          type: string
+        status:
+          type: string
+          enum: [creating, available, failed, deleting, deleted]
+        cluster_id:
+          type: string
+        bound_apps:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    ServiceInstance:
+      type: object
+      properties:
+        name:
+          type: string
+        service_type:
+          type: string
+        plan:
+          type: string
+        status:
+          type: string
+          enum: [creating, available, failed, deleting, deleted]
+        status_message:
+          type: string
+        cluster_id:
+          type: string
+        region:
+          type: string
+        provision_method:
+          type: string
+          enum: [k8s-native, terraform]
+        parameters:
+          type: object
+          additionalProperties:
+            type: string
+        outputs:
+          $ref: "#/components/schemas/ServiceOutputs"
+        bindings:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceBinding"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ServiceOutputs:
+      type: object
+      properties:
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        password:
+          type: string
+          description: Redacted in GET responses
+        database:
+          type: string
+        uri:
+          type: string
+          description: Redacted in GET responses
+        extra:
+          type: object
+          additionalProperties:
+            type: string
+
+    ServiceBinding:
+      type: object
+      properties:
+        app_name:
+          type: string
+        secret_ref:
+          type: string
+        bound_at:
+          type: string
+          format: date-time
+
+    ServiceBindingInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+
+    # ── Catalog ────────────────────────────────────────────
+    ServiceType:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        provider:
+          type: string
+        category:
+          type: string
+          enum: [Databases, Caches, Messaging, Storage, API Gateways]
+        label:
+          type: string
+          description: VCAP_SERVICES label
+        plans:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServicePlan"
+        tags:
+          type: array
+          items:
+            type: string
+
+    ServicePlan:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        resources:
+          $ref: "#/components/schemas/PlanResources"
+        cost_estimate:
+          type: string
+
+    PlanResources:
+      type: object
+      properties:
+        memory_mb:
+          type: integer
+        cpu_millis:
+          type: integer
+        storage_gb:
+          type: integer
+
+    # ── Secrets ────────────────────────────────────────────
+    SecretInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [service, user-defined]
+        key_count:
+          type: integer
+        created_at:
+          type: string
+
+    SecretListItem:
+      type: object
+      properties:
+        name:
+          type: string
+        k8s_name:
+          type: string
+        type:
+          type: string
+          enum: [service, user-defined]
+        service_instance:
+          type: string
+        key_count:
+          type: integer
+        bound_apps:
+          type: integer
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    SecretDetail:
+      type: object
+      properties:
+        name:
+          type: string
+        k8s_name:
+          type: string
+        type:
+          type: string
+          enum: [service, user-defined]
+        service_instance:
+          type: string
+        keys:
+          type: array
+          items:
+            type: string
+        key_count:
+          type: integer
+        bound_apps:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Clusters ───────────────────────────────────────────
+    ClusterInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        provider:
+          type: string
+          enum: [docker-desktop, eks, gke, aks, native]
+        region:
+          type: string
+        context:
+          type: string
+        namespace:
+          type: string
+        domain:
+          type: string
+        status:
+          type: string
+          enum: [connected, disconnected, error]
+        enabled:
+          type: boolean
+        is_active:
+          type: boolean
+        node_count:
+          type: integer
+        app_count:
+          type: integer
+        version:
+          type: string
+        status_message:
+          type: string
+        ingress_class:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+
+    # ── Config ─────────────────────────────────────────────
+    PlatformConfig:
+      type: object
+      properties:
+        domain:
+          type: string
+        namespace:
+          type: string
+        active_cluster:
+          type: string
+        github:
+          type: object
+          properties:
+            owner:
+              type: string
+            repo:
+              type: string
+
+    # ── Settings ───────────────────────────────────────────
+    PlatformSettings:
+      type: object
+      properties:
+        registry:
+          $ref: "#/components/schemas/RegistryConfig"
+        webhooks:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookConfig"
+        smtp:
+          $ref: "#/components/schemas/SMTPConfig"
+        endpoints:
+          type: object
+          properties:
+            overrides:
+              type: object
+              additionalProperties:
+                type: string
+
+    RegistryConfig:
+      type: object
+      properties:
+        url:
+          type: string
+          example: harbor.local:30003
+        project:
+          type: string
+          example: microfoundry
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+          description: Only sent on PUT; omitted in GET responses
+        insecure:
+          type: boolean
+        enabled:
+          type: boolean
+
+    WebhookConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - app.deployed
+              - app.crashed
+              - app.scaled
+              - app.deleted
+              - alert.fired
+              - alert.resolved
+              - service.created
+              - service.deleted
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+
+    SMTPConfig:
+      type: object
+      properties:
+        host:
+          type: string
+          example: smtp.gmail.com
+        port:
+          type: integer
+          example: 587
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+          description: Only sent on PUT; omitted in GET responses
+        from_addr:
+          type: string
+          format: email
+        tls:
+          type: boolean
+        enabled:
+          type: boolean
+
+    ServiceEndpoint:
+      type: object
+      properties:
+        name:
+          type: string
+        display_name:
+          type: string
+        namespace:
+          type: string
+        service_name:
+          type: string
+        service_port:
+          type: integer
+        health_path:
+          type: string
+        internal_url:
+          type: string
+        ingress_host:
+          type: string
+        override_url:
+          type: string
+        has_ingress:
+          type: boolean
+
+    # ── Monitoring ─────────────────────────────────────────
+    MonitoringHealth:
+      type: object
+      properties:
+        healthy:
+          type: boolean
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentStatus"
+
+    ComponentStatus:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Prometheus
+        url:
+          type: string
+        connected:
+          type: boolean
+        error:
+          type: string
+
+    # ── IAM ────────────────────────────────────────────────
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        namespace:
+          type: string
+        owner:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/Member"
+
+    Workspace:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        owner:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/Member"
+
+    Member:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, member, viewer]
+        joined_at:
+          type: string
+          format: date-time
+
+    MemberInvite:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, member, viewer]
+          default: member
+
+    KeycloakUser:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        enabled:
+          type: boolean
+        roles:
+          type: array
+          items:
+            type: string
+
+    OPAPolicy:
+      type: object
+      properties:
+        name:
+          type: string
+        source:
+          type: string
+          description: Rego policy source code
+
+    AuditEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        user:
+          type: string
+        action:
+          type: string
+        resource:
+          type: string
+        details:
+          type: string
+
+    # ── Topologies ─────────────────────────────────────────
+    TopologyListItem:
+      type: object
+      properties:
+        service_type:
+          type: string
+        plan:
+          type: string
+        description:
+          type: string
+        version:
+          type: integer
+        file_count:
+          type: integer
+        has_topology:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+
+    TopologyConfig:
+      type: object
+      properties:
+        service_type:
+          type: string
+        plan:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/TopologyMetadata"
+        files:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Map of filename → Terraform HCL content"
+
+    TopologyMetadata:
+      type: object
+      properties:
+        service_type:
+          type: string
+        plan:
+          type: string
+        version:
+          type: integer
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+
+    # ── SCIM v2 ────────────────────────────────────────────
+    SCIMUser:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+          example: ["urn:ietf:params:scim:schemas:core:2.0:User"]
+        id:
+          type: string
+        externalId:
+          type: string
+        userName:
+          type: string
+        name:
+          type: object
+          properties:
+            givenName:
+              type: string
+            familyName:
+              type: string
+            formatted:
+              type: string
+        emails:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+                format: email
+              type:
+                type: string
+              primary:
+                type: boolean
+        active:
+          type: boolean
+        meta:
+          type: object
+          properties:
+            resourceType:
+              type: string
+            created:
+              type: string
+            lastModified:
+              type: string
+            location:
+              type: string
+
+    SCIMListResponse:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+          example: ["urn:ietf:params:scim:api:messages:2.0:ListResponse"]
+        totalResults:
+          type: integer
+        itemsPerPage:
+          type: integer
+        startIndex:
+          type: integer
+        Resources:
+          type: array
+          items:
+            $ref: "#/components/schemas/SCIMUser"
+
+    SCIMPatchOp:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+          example: ["urn:ietf:params:scim:api:messages:2.0:PatchOp"]
+        Operations:
+          type: array
+          items:
+            type: object
+            properties:
+              op:
+                type: string
+                enum: [replace, add, remove]
+              path:
+                type: string
+              value: {}

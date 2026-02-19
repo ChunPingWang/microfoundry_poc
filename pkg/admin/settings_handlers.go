@@ -2,17 +2,25 @@ package admin
 
 import (
 	"bytes"
+	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"runtime"
 	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/younjinjeong/microfoundry/pkg/hosts"
 	"github.com/younjinjeong/microfoundry/pkg/k8s"
 	"github.com/younjinjeong/microfoundry/pkg/models"
 	"github.com/younjinjeong/microfoundry/pkg/settings"
+	mftls "github.com/younjinjeong/microfoundry/pkg/tls"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // settingsStore creates a settings store for the current request's active cluster.
@@ -666,4 +674,182 @@ func (s *Server) APISaveEndpointsHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// --- Platform Settings (DNS, TLS, Environment) ---
+
+// IngressInfo represents a K8s Ingress resource for display.
+type IngressInfo struct {
+	Name      string
+	Namespace string
+	Host      string
+	TLS       bool
+	Secret    string
+	Service   string
+	Port      int32
+	Class     string
+}
+
+// listIngresses lists all Ingress resources in the given namespaces.
+func (s *Server) listIngresses(ctx context.Context, client *k8s.Client, namespaces []string) []IngressInfo {
+	var result []IngressInfo
+	for _, ns := range namespaces {
+		ingresses, err := client.Clientset.NetworkingV1().Ingresses(ns).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			continue
+		}
+		for _, ing := range ingresses.Items {
+			className := ""
+			if ing.Spec.IngressClassName != nil {
+				className = *ing.Spec.IngressClassName
+			}
+			hasTLS := len(ing.Spec.TLS) > 0
+			secretName := ""
+			if hasTLS && len(ing.Spec.TLS[0].SecretName) > 0 {
+				secretName = ing.Spec.TLS[0].SecretName
+			}
+			for _, rule := range ing.Spec.Rules {
+				svcName := ""
+				var svcPort int32
+				if rule.HTTP != nil && len(rule.HTTP.Paths) > 0 {
+					svcName = rule.HTTP.Paths[0].Backend.Service.Name
+					svcPort = rule.HTTP.Paths[0].Backend.Service.Port.Number
+				}
+				result = append(result, IngressInfo{
+					Name:      ing.Name,
+					Namespace: ns,
+					Host:      rule.Host,
+					TLS:       hasTLS,
+					Secret:    secretName,
+					Service:   svcName,
+					Port:      svcPort,
+					Class:     className,
+				})
+			}
+		}
+	}
+	return result
+}
+
+func hostsFilePath() string {
+	if runtime.GOOS == "windows" {
+		return `C:\Windows\System32\drivers\etc\hosts`
+	}
+	return "/etc/hosts"
+}
+
+func providerLabel(provider string) string {
+	switch provider {
+	case "docker-desktop":
+		return "Local Development — Docker Desktop"
+	case "eks":
+		return "Production — AWS EKS"
+	case "gke":
+		return "Production — Google GKE"
+	case "aks":
+		return "Production — Azure AKS"
+	default:
+		return "Kubernetes"
+	}
+}
+
+func isLocalProvider(provider string) bool {
+	return provider == "docker-desktop" || provider == "kind" || provider == "minikube"
+}
+
+// PlatformSettingsHandler renders the DNS, TLS, and environment settings page.
+func (s *Server) PlatformSettingsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	client, err := s.getClient(r)
+	if err != nil {
+		http.Error(w, "No cluster available: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	clusters := s.clientManager.ListClusters(ctx)
+
+	// Find active cluster info
+	var activeProvider, activeVersion string
+	var activeNodeCount int
+	for _, c := range clusters {
+		if c.IsActive {
+			activeProvider = c.Provider
+			activeVersion = c.Version
+			activeNodeCount = c.NodeCount
+			break
+		}
+	}
+	if activeProvider == "" {
+		activeProvider = "docker-desktop"
+	}
+
+	// TLS certificate info — parse admin cert PEM for details
+	var certInfo map[string]any
+	if s.tlsCertFile != "" {
+		if certPEM, err := os.ReadFile(s.tlsCertFile); err == nil {
+			block, _ := pem.Decode(certPEM)
+			if block != nil {
+				if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
+					certInfo = map[string]any{
+						"CertFile":  s.tlsCertFile,
+						"KeyFile":   s.tlsKeyFile,
+						"Subject":   cert.Subject.CommonName,
+						"DNSNames":  cert.DNSNames,
+						"NotBefore": cert.NotBefore,
+						"NotAfter":  cert.NotAfter,
+						"Issuer":    cert.Issuer.CommonName,
+					}
+				}
+			}
+		}
+	}
+
+	// K8s TLS secret check
+	hasTLSSecret := mftls.HasTLSSecret(ctx, client.Clientset, client.Namespace)
+	hasTLSSecretMon := mftls.HasTLSSecret(ctx, client.Clientset, "monitoring")
+
+	// Hosts file entries
+	hostsEntries, _ := hosts.List()
+
+	// All ingresses across app and monitoring namespaces
+	ingresses := s.listIngresses(ctx, client, []string{client.Namespace, "monitoring"})
+
+	// Platform services
+	store, _ := s.settingsStore(r)
+	var overrides map[string]string
+	if store != nil {
+		ps, _ := store.Get(ctx)
+		overrides = ps.Endpoints.Overrides
+	}
+	discovered := client.DiscoverPlatformServices(ctx, client.Domain, overrides)
+
+	content := map[string]any{
+		"Environment":      providerLabel(activeProvider),
+		"Provider":         activeProvider,
+		"IsLocal":          isLocalProvider(activeProvider),
+		"K8sVersion":       activeVersion,
+		"NodeCount":        activeNodeCount,
+		"ActiveCluster":    s.clientManager.GetActive(),
+		"Clusters":         clusters,
+		"Domain":           client.Domain,
+		"AdminDomain":      s.adminDomain,
+		"AuthDomain":       s.config.Auth.IssuerURL,
+		"Namespace":        client.Namespace,
+		"TLSEnabled":       s.tlsEnabled,
+		"CertInfo":         certInfo,
+		"HasTLSSecret":     hasTLSSecret,
+		"HasTLSSecretMon":  hasTLSSecretMon,
+		"TLSSecretName":    mftls.SecretName,
+		"HostsEntries":     hostsEntries,
+		"HostsFilePath":    hostsFilePath(),
+		"Ingresses":        ingresses,
+		"PlatformServices": discovered,
+		"Version":          s.version,
+		"AuthEnabled":      s.authEnabled(),
+	}
+
+	data := s.pageDataWithUser(r, "Platform Settings", "platform")
+	data.Content = content
+	s.templates.Render(w, "settings_platform.html", data)
 }

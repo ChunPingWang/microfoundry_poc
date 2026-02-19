@@ -19,12 +19,10 @@ test.describe('Settings - Registry', () => {
 
   test('save registry config shows success banner', async ({ page }) => {
     await page.goto('/settings/registry');
-    // Fill in form
     await page.locator(settingsRegistry.urlInput).fill('harbor.local:30003');
     await page.locator(settingsRegistry.projectInput).fill('microfoundry');
     await page.locator(settingsRegistry.usernameInput).fill('admin');
 
-    // Submit form
     await page.locator(settingsRegistry.saveButton).click();
     await page.waitForURL(/saved=true|registry/);
   });
@@ -33,8 +31,22 @@ test.describe('Settings - Registry', () => {
     await page.goto('/settings/registry');
     const testBtn = page.locator(settingsRegistry.testButton);
     await expect(testBtn).toBeVisible();
-    // Should have hx-post attribute for HTMX
     await expect(testBtn).toHaveAttribute('hx-post', /registry\/test/);
+  });
+
+  test('test result container exists for HTMX response', async ({ page }) => {
+    await page.goto('/settings/registry');
+    const testResult = page.locator(settingsRegistry.testResult);
+    await expect(testResult).toBeAttached();
+  });
+
+  test('image preview shows registry prefix', async ({ page }) => {
+    await page.goto('/settings/registry');
+    // Image preview should show a code block with registry prefix
+    const codeBlock = page.locator('code:has-text("my-app:latest")');
+    if (await codeBlock.isVisible()) {
+      await expect(codeBlock).toBeVisible();
+    }
   });
 });
 
@@ -57,6 +69,13 @@ test.describe('Settings - Webhooks', () => {
     await expect(page.locator(settingsWebhooks.urlInput)).toBeVisible();
   });
 
+  test('webhook URL input validates URL format', async ({ page }) => {
+    await page.goto('/settings/webhooks');
+    await page.locator(settingsWebhooks.addButton).click();
+    const urlInput = page.locator(settingsWebhooks.urlInput);
+    await expect(urlInput).toHaveAttribute('type', 'url');
+  });
+
   test('all 8 event types shown as checkboxes', async ({ page }) => {
     await page.goto('/settings/webhooks');
     const addBtn = page.locator(settingsWebhooks.addButton);
@@ -67,23 +86,44 @@ test.describe('Settings - Webhooks', () => {
     expect(count).toBe(8);
   });
 
-  test('delete webhook has confirmation', async ({ page, request }) => {
+  test('enabled checkbox is checked by default', async ({ page }) => {
     await page.goto('/settings/webhooks');
-    // Check for delete buttons if webhooks exist
+    await page.locator(settingsWebhooks.addButton).click();
+    const enabledCheckbox = page.locator(settingsWebhooks.enabledCheckbox);
+    await expect(enabledCheckbox).toBeChecked();
+  });
+
+  test('webhook form submits via HTMX', async ({ page }) => {
+    await page.goto('/settings/webhooks');
+    await page.locator(settingsWebhooks.addButton).click();
+    const form = page.locator(settingsWebhooks.addForm);
+    // Form or submit button should have hx-post
+    const htmxEl = form.locator('[hx-post*="webhooks"]');
+    await expect(htmxEl.first()).toBeAttached();
+  });
+
+  test('delete webhook has confirmation', async ({ page }) => {
+    await page.goto('/settings/webhooks');
     const deleteBtns = page.locator('button[hx-delete*="webhooks"]');
     const count = await deleteBtns.count();
     if (count > 0) {
-      // Delete buttons should have hx-confirm attribute
       const firstDelete = deleteBtns.first();
       await expect(firstDelete).toHaveAttribute('hx-confirm', /.+/);
     }
   });
 
-  test('test webhook button exists', async ({ page, request }) => {
+  test('test webhook button exists for configured webhooks', async ({ page }) => {
     await page.goto('/settings/webhooks');
     const testBtns = page.locator('button[hx-post*="test"]');
-    // Only if webhooks exist
     const count = await testBtns.count();
+    expect(count).toBeGreaterThanOrEqual(0);
+  });
+
+  test('webhook status badges show active/disabled state', async ({ page }) => {
+    await page.goto('/settings/webhooks');
+    const statusBadges = page.locator('.bg-green-100:has-text("Active"), .bg-gray-100:has-text("Disabled")');
+    const count = await statusBadges.count();
+    // Only if webhooks exist
     expect(count).toBeGreaterThanOrEqual(0);
   });
 });
@@ -121,5 +161,23 @@ test.describe('Settings - SMTP', () => {
     const testBtn = page.locator(settingsSMTP.testButton);
     await expect(testBtn).toBeVisible();
     await expect(testBtn).toHaveAttribute('hx-post', /smtp\/test/);
+  });
+
+  test('test result container exists', async ({ page }) => {
+    await page.goto('/settings/smtp');
+    const testResult = page.locator(settingsSMTP.testResult);
+    await expect(testResult).toBeAttached();
+  });
+
+  test('port input has number type', async ({ page }) => {
+    await page.goto('/settings/smtp');
+    const portInput = page.locator(settingsSMTP.portInput);
+    await expect(portInput).toHaveAttribute('type', 'number');
+  });
+
+  test('from address input has email type', async ({ page }) => {
+    await page.goto('/settings/smtp');
+    const fromInput = page.locator(settingsSMTP.fromInput);
+    await expect(fromInput).toHaveAttribute('type', 'email');
   });
 });

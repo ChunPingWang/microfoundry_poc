@@ -31,6 +31,7 @@ test.describe('Navigation', () => {
     await expect(sidebar.locator('a[href="/settings/registry"]')).toBeVisible();
     await expect(sidebar.locator('a[href="/settings/webhooks"]')).toBeVisible();
     await expect(sidebar.locator('a[href="/settings/smtp"]')).toBeVisible();
+    await expect(sidebar.locator('a[href="/settings/endpoints"]')).toBeVisible();
     await expect(sidebar.locator('a[href="/users"]')).toBeVisible();
     await expect(sidebar.locator('a[href="/config"]')).toBeVisible();
   });
@@ -56,7 +57,7 @@ test.describe('Navigation', () => {
     const routes = [
       '/', '/apps', '/services', '/secrets', '/monitoring',
       '/clusters', '/catalog', '/settings/registry', '/settings/webhooks',
-      '/settings/smtp', '/users', '/config',
+      '/settings/smtp', '/settings/endpoints', '/users', '/config',
     ];
 
     for (const route of routes) {
@@ -86,5 +87,17 @@ test.describe('Navigation', () => {
     // Click the Dashboard link in sidebar to return to /
     await page.locator(nav.sidebar).locator('a[href="/"]').first().click();
     await expect(page).toHaveURL('/');
+  });
+
+  test('header displays active cluster badge', async ({ page }) => {
+    await page.goto('/');
+    // Header should show the active cluster indicator
+    const clusterLink = page.locator('header a[href="/clusters"]');
+    await expect(clusterLink).toBeVisible();
+  });
+
+  test('brand name displays MicroFoundry', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator(nav.brand)).toContainText('MicroFoundry');
   });
 });

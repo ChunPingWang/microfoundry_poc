@@ -1,0 +1,35 @@
+# Gitleaks configuration for MicroFoundry
+# https://github.com/gitleaks/gitleaks
+
+title = "MicroFoundry Secret Detection"
+
+[extend]
+useDefault = true
+
+# Allowlists for known false positives
+[allowlist]
+description = "MicroFoundry global allowlist"
+
+paths = [
+  # Config with real secrets is gitignored; this catches example/template files only
+  '''configs/mf\.yaml''',
+  # Test fixtures
+  '''test/.*''',
+  # Vendor directory
+  '''vendor/.*''',
+  # Go module cache
+  '''go\.sum''',
+]
+
+# Allow struct field names and config key references in Go code
+regexTarget = "line"
+regexes = [
+  # Go struct tags and field names referencing "secret" or "password"
+  '''(yaml|json|mapstructure):"[^"]*"''',
+  # K8s secret type constants
+  '''corev1\.SecretType''',
+  # Variable/field declarations (not values)
+  '''(Secret|Password|Token)(Name|Key|Field|Type|Data)\s''',
+  # Grafana default admin password in helm values (non-sensitive, local dev only)
+  '''adminPassword:\s*"microfoundry"''',
+]

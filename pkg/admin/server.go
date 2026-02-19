@@ -238,6 +238,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /apps/{name}/logs/stream", s.LogStreamHandler)
 	s.mux.HandleFunc("GET /apps/{name}/logs/history", s.LogHistoryHandler)
 	s.mux.HandleFunc("GET /config", s.ConfigHandler)
+	s.mux.HandleFunc("GET /docs", s.DocsHandler)
 	s.mux.HandleFunc("GET /services", s.ServicesListHandler)
 	s.mux.HandleFunc("GET /services/{name}", s.ServiceDetailHandler)
 	s.mux.HandleFunc("GET /catalog", s.CatalogHandler)
@@ -299,6 +300,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /settings/endpoints", s.SaveEndpointsHandler)
 	s.mux.HandleFunc("POST /settings/endpoints/{name}/ingress", s.CreateEndpointIngressHandler)
 	s.mux.HandleFunc("POST /settings/endpoints/{name}/test", s.TestEndpointHandler)
+	// Settings routes — Platform (DNS, TLS, Environment)
+	s.mux.HandleFunc("GET /settings/platform", s.PlatformSettingsHandler)
 
 	// Catalog visibility routes
 	s.mux.HandleFunc("POST /catalog/{type}/{plan}/visibility", s.TogglePlanVisibilityHandler)

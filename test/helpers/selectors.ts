@@ -18,12 +18,14 @@ export const nav = {
   registry: 'a[href="/settings/registry"]',
   webhooks: 'a[href="/settings/webhooks"]',
   smtp: 'a[href="/settings/smtp"]',
+  endpoints: 'a[href="/settings/endpoints"]',
   users: 'a[href="/users"]',
   config: 'a[href="/config"]',
   activeClass: 'bg-gray-800',
 };
 
 export const dashboard = {
+  statsGrid: '.grid.grid-cols-1',
   appCountCard: 'a[href="/apps"] .text-2xl',
   domainCard: 'text=Domain',
   namespaceCard: 'text=Namespace',
@@ -51,6 +53,9 @@ export const apps = {
 };
 
 export const appDetail = {
+  backButton: 'a[href="/apps"]',
+  appName: 'h3.text-2xl',
+  stateBadge: 'span.inline-flex',
   // Tabs
   overviewTab: 'text=Overview',
   instancesTab: 'text=Instances',
@@ -58,20 +63,37 @@ export const appDetail = {
   servicesTab: 'text=Services',
   routesTab: 'text=Routes',
   logsTab: 'text=Logs',
+  metricsTab: 'text=Metrics',
   performanceTab: 'text=Performance',
+  tabContent: '#tab-content',
 };
 
 export const services = {
   title: 'text=Provisioned Services',
-  createButton: 'a:has-text("Create Service")',
+  createButton: 'button:has-text("Create Service")',
+  createModal: '#create-svc-modal',
+  serviceTypeSelect: '#svc-type',
+  planSelect: '#svc-plan',
+  serviceNameInput: '#svc-name',
+  planInfo: '#plan-info',
   tableBody: '#service-table-body',
   emptyState: 'text=No services provisioned',
 };
 
+export const serviceDetail = {
+  breadcrumb: 'nav.text-sm',
+  serviceName: 'h2.text-2xl',
+  statusBadge: 'span.inline-flex',
+  connectionDetails: 'text=Connection Details',
+  vcapSection: 'text=VCAP_SERVICES',
+  bindForm: 'input[name="app_name"]',
+};
+
 export const catalog = {
   title: 'header h2',
+  terraformBadge: '.bg-green-100, .bg-yellow-100',
   uploadTopology: 'text=Upload Topology',
-  // Categories — use .first() in tests since category text may appear multiple times
+  // Categories
   databases: 'h3:has-text("Databases")',
   caches: 'h3:has-text("Caches")',
   messaging: 'h3:has-text("Messaging")',
@@ -83,9 +105,18 @@ export const secrets = {
   title: 'header h2',
   createButton: 'a[href="/secrets/new"]',
   secretList: '#secret-list',
-  filterAll: 'text=All',
-  filterService: 'text=Service',
-  filterUser: 'text=User-defined',
+  filterAll: 'a:has-text("All")',
+  filterService: 'a:has-text("Service")',
+  filterUser: 'a:has-text("User-defined")',
+};
+
+export const secretDetail = {
+  secretName: 'h2.text-2xl',
+  typeBadge: 'span.inline-flex',
+  revealButton: '[hx-get*="reveal"]',
+  maskedValue: 'text=********',
+  boundApps: 'text=Bound Applications',
+  metadata: 'text=Metadata',
 };
 
 export const clusters = {
@@ -98,6 +129,10 @@ export const clusters = {
   namespaceInput: '#cluster-namespace',
   domainInput: '#cluster-domain',
   regionInput: '#cluster-region',
+  ingressInput: '#cluster-ingress',
+  gatewayInfo: '#gateway-info',
+  activeClusterRow: '.bg-blue-50',
+  activeBadge: '.bg-blue-100',
 };
 
 export const settingsRegistry = {
@@ -109,8 +144,9 @@ export const settingsRegistry = {
   insecureCheckbox: 'input[name="insecure"]',
   enabledCheckbox: 'input[name="enabled"]',
   testButton: 'button:has-text("Test Connection")',
+  testResult: '#test-result',
   saveButton: 'button:has-text("Save")',
-  successBanner: 'text=Settings saved',
+  successBanner: '.bg-green-50',
 };
 
 export const settingsWebhooks = {
@@ -120,6 +156,7 @@ export const settingsWebhooks = {
   nameInput: '#wh-name',
   urlInput: '#wh-url',
   eventsCheckboxes: 'input[name="events"]',
+  enabledCheckbox: 'input[name="enabled"]',
 };
 
 export const settingsSMTP = {
@@ -132,22 +169,63 @@ export const settingsSMTP = {
   tlsCheckbox: 'input[name="tls"]',
   enabledCheckbox: 'input[name="enabled"]',
   testButton: 'button:has-text("Test Connection")',
+  testResult: '#test-result',
   saveButton: 'button:has-text("Save")',
+};
+
+export const settingsEndpoints = {
+  title: 'text=Service Endpoints',
+  saveButton: 'button:has-text("Save")',
+  successBanner: '.bg-green-50',
+  testButton: 'button:has-text("Test")',
+  createIngressButton: 'button:has-text("Create Ingress")',
 };
 
 export const monitoring = {
   title: 'text=Metrics & Alerts',
   grafanaButton: 'text=Open Grafana',
+  componentHealth: '.grid.grid-cols-2',
   alertsContainer: '#alerts-container',
+  grafanaIframe: 'iframe[src*="grafana"]',
 };
 
 export const users = {
   title: 'text=Users & Organizations',
+  noAuthMessage: 'text=authentication',
+  // IAM tabs
+  workspacesTab: 'a:has-text("Workspaces")',
+  orgsTab: 'a:has-text("Organizations")',
+  usersTab: 'a:has-text("Users")',
+  policiesTab: 'a:has-text("Policies")',
+  auditTab: 'a:has-text("Audit Log")',
+  tabContent: '#tab-content',
+  // Org management
   createOrgForm: '#create-org-form',
+  createOrgButton: 'button:has-text("Create")',
+  // User management
+  createUserForm: '#create-user-form',
+  createUserButton: 'button:has-text("Create User")',
+};
+
+export const topology = {
+  uploadForm: 'text=Upload Topology',
+  serviceTypeSelect: 'select[name="service_type"]',
+  planSelect: 'select[name="plan_id"]',
+  editor: 'textarea[name*="file_content"]',
+  previewButton: 'button:has-text("Preview")',
+  saveButton: 'button:has-text("Save")',
 };
 
 export const config = {
   kubernetesSection: 'h3:has-text("Kubernetes")',
   githubSection: 'h3:has-text("GitHub")',
   platformSection: 'h3:has-text("Platform")',
+};
+
+export const docsPage = {
+  manualTab: 'a[href="/docs?tab=manual"]',
+  adminTab: 'a[href="/docs?tab=admin"]',
+  architectureTab: 'a[href="/docs?tab=architecture"]',
+  content: '.docs-content',
+  navLink: 'a[href="/docs"]',
 };

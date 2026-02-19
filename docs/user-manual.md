@@ -477,13 +477,25 @@ auth:
   realm: "microfoundry"
 ```
 
-### Roles
+### Roles (5-tier RBAC)
 
-Keycloak is configured with these roles:
-- **platform-admin** — full platform access (SCIM, settings, clusters, audit)
+Keycloak is configured with a 5-tier role hierarchy:
+- **platform-admin** — full platform access (SCIM, settings, clusters, audit, all workspaces/orgs)
+- **workspace-admin** — manage organizations and members within a workspace
 - **org-admin** — organization administrator (write/delete within org)
-- **org-member** — organization member (write apps, services, secrets)
+- **member** — organization member (write apps, services, secrets)
 - **viewer** — read-only access to all resources
+
+The admin UI sidebar adapts to the authenticated user's role — platform-admins see the full Settings section, while regular members see only the Operations section.
+
+### Workspaces
+
+Workspaces provide a hierarchy level above organizations for multi-tenant platform management:
+
+- **Platform → Workspace → Organization → User** hierarchy
+- Workspace-admins can manage organizations and members within their workspace
+- Create workspaces from the admin dashboard (Users & Orgs → Workspaces tab) or CLI (`mf create-workspace`)
+- Switch active workspace to scope operations
 
 ### Organizations
 
@@ -645,6 +657,16 @@ Without a registry configured, images remain local (suitable for Docker Desktop 
 | `mf secret [name]` | Show secret details |
 | `mf create-secret <name> k=v...` | Create a user secret |
 | `mf delete-secret [name]` | Delete a secret |
+
+### User & Organization Commands
+
+| Command | Description |
+|---------|-------------|
+| `mf users` | List Keycloak users |
+| `mf create-user <email>` | Create a new user |
+| `mf orgs` | List organizations |
+| `mf create-org <name>` | Create an organization |
+| `mf auth login` | Authenticate via OIDC |
 
 ### Platform Commands
 

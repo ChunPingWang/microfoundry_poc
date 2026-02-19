@@ -140,6 +140,9 @@ func templateFuncs() template.FuncMap {
 			}
 			return false
 		},
+		"safeHTML": func(s string) template.HTML {
+			return template.HTML(s)
+		},
 	}
 }
 
@@ -183,9 +186,11 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"settings_webhooks.html",
 		"settings_smtp.html",
 		"settings_endpoints.html",
+		"settings_platform.html",
 		"login.html",
 		"denied.html",
 		"workspaces.html",
+		"docs.html",
 	}
 
 	pages := make(map[string]*template.Template, len(pageFiles)+3)
@@ -221,6 +226,7 @@ func NewTemplateRenderer() *TemplateRenderer {
 		"tab_iam_users.html":     base,
 		"tab_iam_policies.html":  base,
 		"tab_iam_audit.html":     base,
+		"secret_rows.html":       base,
 	}
 
 	return &TemplateRenderer{base: base, pages: pages, partials: partials}

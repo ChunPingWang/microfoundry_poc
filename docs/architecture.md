@@ -130,6 +130,8 @@ pkg/
 │   └── visibility.go # Plan visibility toggle (ConfigMap-backed)
 ├── settings/        # Platform settings store
 │   └── store.go     # ConfigMap/Secret-backed persistence
+├── tls/             # TLS certificate generation
+│   └── mkcert.go    # mkcert-based .dev HTTPS certificates
 └── terraform/       # Terraform integration
     └── topology.go  # HCL topology management
 ```
@@ -153,6 +155,9 @@ cmd/mf/
 ├── unbind_service.go  # mf unbind-service — unbind from app
 ├── delete_service.go  # mf delete-service — deprovision
 ├── secrets.go         # mf secrets / mf create-secret / mf delete-secret
+├── users.go           # mf users / mf create-user — Keycloak user management
+├── orgs.go            # mf orgs / mf create-org — organization management
+├── auth.go            # mf auth login — OIDC authentication
 └── setup.go           # mf setup keycloak / keycloak-realm / keycloak-idp
 ```
 
@@ -573,15 +578,15 @@ Runtime settings from the admin UI (stored in K8s) take precedence over file-bas
 
 ```
 microfoundry/
-├── cmd/mf/                    # CLI entry points (20+ commands)
+├── cmd/mf/                    # CLI entry points (25+ commands)
 ├── pkg/                       # Go packages (core logic)
 │   ├── admin/                 # Web dashboard + API handlers
 │   │   └── static/            # Embedded HTML/CSS templates
-│   │       ├── templates/     # Page templates (18+ pages)
-│   │       │   ├── partials/  # Shared partials (nav, etc.)
-│   │       │   └── tabs/      # HTMX tab partials (6 tabs)
+│   │       ├── templates/     # Page templates (25+ pages)
+│   │       │   ├── partials/  # Shared partials (nav, header)
+│   │       │   └── tabs/      # HTMX tab partials (13 tabs)
 │   │       └── css/           # Tailwind CSS (CDN)
-│   ├── auth/                  # OIDC + sessions + orgs
+│   ├── auth/                  # OIDC + sessions + orgs + workspaces
 │   ├── build/                 # Docker + CNB build
 │   ├── config/                # Viper config loader
 │   ├── hosts/                 # /etc/hosts management
@@ -592,15 +597,19 @@ microfoundry/
 │   ├── secrets/               # Secret management
 │   ├── service/               # Service broker + catalog
 │   ├── settings/              # Platform settings store
+│   ├── tls/                   # mkcert TLS certificates
 │   └── terraform/             # Terraform topology
 ├── deploy/
 │   ├── k8s/                   # K8s manifests (base + overlays)
-│   └── monitoring/            # Observability stack
-│       ├── install.sh         # One-command setup
-│       ├── beyla-config.yaml  # eBPF DaemonSet
-│       ├── prometheus-recording-rules.yaml
-│       ├── dashboards/        # Grafana dashboards
-│       └── alerts/            # Alert rules
+│   ├── monitoring/            # Observability stack
+│   │   ├── install.sh         # One-command setup
+│   │   ├── beyla-config.yaml  # eBPF DaemonSet
+│   │   ├── prometheus-recording-rules.yaml
+│   │   ├── dashboards/        # Grafana dashboards
+│   │   └── alerts/            # Alert rules
+│   ├── helm/                  # Helm chart (OCI artifact)
+│   └── csp/                   # Cloud deployment packages (AWS/GCP/Azure/local)
+├── test/                      # E2E tests (Playwright, 82 cases, 12 suites)
 ├── configs/mf.example.yaml    # Example configuration
 ├── docs/                      # Documentation
 ├── Makefile                   # Build targets
@@ -621,11 +630,11 @@ This ensures each page's `{{define "content"}}` block is isolated.
 
 The sidebar is structured into two groups:
 
-**Operations** (daily use):
-- Dashboard, Applications, Services, Secrets, Metrics & Alerts
+**Operations** (all authenticated users):
+- Dashboard, Applications, Services, Secrets
 
-**Settings** (environment setup):
-- Clusters, Service Catalog, Registry, Webhooks, SMTP, Metrics & Alerts, Users & Orgs, Platform
+**Settings** (platform-admin only):
+- Users & Orgs (5-tab IAM: Workspaces, Orgs, Users, Policies, Audit), Clusters, Service Catalog, Registry, Webhooks, SMTP, Endpoints, Metrics & Alerts, Platform
 
 ---
 
