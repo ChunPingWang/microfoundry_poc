@@ -15,7 +15,9 @@ Technical architecture documentation for MicroFoundry — a micro CloudFoundry i
 7. [Authentication & Authorization](#authentication--authorization)
 8. [Multi-Cluster Architecture](#multi-cluster-architecture)
 9. [Platform Settings Storage](#platform-settings-storage)
-10. [Project Structure](#project-structure)
+10. [Security](#security)
+11. [Documentation System](#documentation-system)
+12. [Project Structure](#project-structure)
 
 ---
 
@@ -72,7 +74,7 @@ MicroFoundry is a single Go binary (`mf`) that acts as both a CLI tool and an HT
 pkg/
 ├── admin/           # HTTP server, handlers, templates (Admin UI + API)
 │   ├── server.go    # Route registration, server lifecycle
-│   ├── handlers.go  # App detail, dashboard, tab routing
+│   ├── handlers.go  # App detail, dashboard, tab routing, docs handler
 │   ├── api.go       # JSON API endpoints
 │   ├── logs.go      # SSE log streaming
 │   ├── templates.go # Go template renderer with clone pattern
@@ -81,8 +83,12 @@ pkg/
 │   ├── cluster_handlers.go      # Multi-cluster management
 │   ├── monitoring_handlers.go   # Alerting & monitoring UI
 │   ├── secret_handlers.go       # Secret management UI
-│   ├── settings_handlers.go     # Registry, webhooks, SMTP config
+│   ├── settings_handlers.go     # Registry, webhooks, SMTP, endpoints config
 │   ├── topology_handlers.go     # Service topology visualization
+│   ├── workspace_handlers.go    # Workspace CRUD UI + API
+│   ├── org_handlers.go          # Organization management UI + API
+│   ├── iam_handlers.go          # Keycloak user, policy, audit UI + API
+│   ├── scim_handlers.go         # SCIM v2 protocol handlers
 │   └── static/                  # Embedded HTML/CSS templates
 ├── auth/            # OIDC authentication (Keycloak)
 │   ├── oidc.go      # Authorization code flow with PKCE
@@ -94,6 +100,11 @@ pkg/
 │   └── builder.go   # Dockerfile/CNB detection, docker build/push
 ├── config/          # Configuration loading
 │   └── config.go    # Viper-based config with multi-cluster support
+├── github/          # GitHub integration via gh CLI
+│   ├── client.go    # gh CLI wrapper (exec-based, no API token needed)
+│   ├── branches.go  # Branch listing and management
+│   ├── issues.go    # Issue operations
+│   └── pulls.go     # Pull request operations
 ├── hosts/           # /etc/hosts management
 │   └── hosts.go     # Add/remove host entries for local dev
 ├── k8s/             # Kubernetes client operations
@@ -143,7 +154,6 @@ cmd/mf/
 ├── main.go            # Root command, K8s client factory
 ├── push.go            # mf push — build → push → deploy → ingress → hosts
 ├── apps.go            # mf apps — list deployments
-├── app.go             # mf app — single app detail (not present, uses apps.go)
 ├── logs.go            # mf logs — Loki query + live pod streaming
 ├── scale.go           # mf scale — patch deployment replicas
 ├── delete.go          # mf delete — remove deployment + service + ingress
@@ -157,7 +167,8 @@ cmd/mf/
 ├── secrets.go         # mf secrets / mf create-secret / mf delete-secret
 ├── users.go           # mf users / mf create-user — Keycloak user management
 ├── orgs.go            # mf orgs / mf create-org — organization management
-├── auth.go            # mf auth login — OIDC authentication
+├── workspaces.go      # mf workspaces / mf create-workspace — workspace management
+├── login.go           # mf login — OIDC authentication
 └── setup.go           # mf setup keycloak / keycloak-realm / keycloak-idp
 ```
 
@@ -574,6 +585,88 @@ Runtime settings from the admin UI (stored in K8s) take precedence over file-bas
 
 ---
 
+## Security
+
+### Pre-commit Secret Detection
+
+MicroFoundry uses [pre-commit](https://pre-commit.com/) hooks with [gitleaks](https://github.com/gitleaks/gitleaks) to prevent accidental secret commits. The hook configuration is in `.pre-commit-config.yaml` and runs automatically on every `git commit`.
+
+**Hooks installed:**
+
+| Hook | Source | Purpose |
+|------|--------|---------|
+| `gitleaks` | gitleaks/gitleaks v8.21.2 | Detect hardcoded secrets, API keys, passwords |
+| `trailing-whitespace` | pre-commit-hooks v5.0.0 | Remove trailing whitespace |
+| `end-of-file-fixer` | pre-commit-hooks v5.0.0 | Ensure files end with newline |
+| `check-yaml` | pre-commit-hooks v5.0.0 | Validate YAML syntax |
+| `check-json` | pre-commit-hooks v5.0.0 | Validate JSON syntax |
+| `check-merge-conflict` | pre-commit-hooks v5.0.0 | Detect unresolved merge markers |
+| `detect-private-key` | pre-commit-hooks v5.0.0 | Detect committed private keys |
+
+**Setup:** `make hooks` (or `pip install pre-commit && pre-commit install`)
+
+### Gitleaks Configuration
+
+The `.gitleaks.toml` file extends gitleaks' default ruleset with project-specific allowlists:
+
+- **Allowed paths**: `configs/mf.yaml` (gitignored), `test/`, `vendor/`, `go.sum`
+- **Allowed patterns**: Go struct tags, K8s secret type constants, variable declarations (not values), local-dev Helm passwords
+
+### Sensitive File Protection
+
+The `.gitignore` excludes files likely to contain secrets:
+
+- `configs/mf.yaml` — active config (use `mf.example.yaml` as template)
+- `.mf/` — local MicroFoundry state directory
+- `.env` / `.env.*` — environment variable files
+- `deploy/k8s/overlays/*/generated/` — generated K8s manifests
+
+### Secrets in Kubernetes
+
+For production deployments, MicroFoundry recommends:
+
+- **Sealed Secrets** or **SOPS** for encrypting K8s Secrets at rest in Git
+- Platform credentials (registry passwords, SMTP passwords, webhook secrets) are stored in K8s Secrets (`mf-platform-credentials`), never in config files
+- Service instance credentials are stored in per-service K8s Secrets (`mf-svc-<name>`)
+
+---
+
+## Documentation System
+
+### Embedded Markdown Docs
+
+Documentation files in `docs/` are embedded into the binary at build time via `docs/embed.go`:
+
+```go
+package docs
+
+import "embed"
+
+//go:embed *.md
+var Files embed.FS
+```
+
+The `DocsHandler` in `pkg/admin/handlers.go` serves these docs through the admin UI at `GET /docs`:
+
+1. **Landing page** (`/docs`) — Displays a card grid of all documentation entries from the `docCatalog` registry
+2. **Doc view** (`/docs?tab=<key>`) — Reads the markdown file from `docs.Files`, converts it to HTML using [goldmark](https://github.com/yuin/goldmark), and renders it inside the admin layout
+
+```
+docs/embed.go  ──embed.FS──▶  docs.Files
+                                  │
+admin/handlers.go  ◀──ReadFile───┘
+  DocsHandler()
+    │
+    ├── tab="" → render card grid (docCatalog)
+    └── tab=<key> → docs.Files.ReadFile(entry.File)
+                      → goldmark.Convert(md, &buf)
+                      → render docs.html with HTML content
+```
+
+This means all documentation is available in the admin dashboard without external file access, and stays in sync with the binary version.
+
+---
+
 ## Project Structure
 
 ```
@@ -583,12 +676,13 @@ microfoundry/
 │   ├── admin/                 # Web dashboard + API handlers
 │   │   └── static/            # Embedded HTML/CSS templates
 │   │       ├── templates/     # Page templates (25+ pages)
-│   │       │   ├── partials/  # Shared partials (nav, header)
+│   │       │   ├── partials/  # Shared partials (nav, header, secret_rows)
 │   │       │   └── tabs/      # HTMX tab partials (13 tabs)
 │   │       └── css/           # Tailwind CSS (CDN)
 │   ├── auth/                  # OIDC + sessions + orgs + workspaces
 │   ├── build/                 # Docker + CNB build
 │   ├── config/                # Viper config loader
+│   ├── github/                # GitHub integration (gh CLI wrapper)
 │   ├── hosts/                 # /etc/hosts management
 │   ├── k8s/                   # Kubernetes client
 │   ├── manifest/              # CF manifest parser
@@ -608,11 +702,28 @@ microfoundry/
 │   │   ├── dashboards/        # Grafana dashboards
 │   │   └── alerts/            # Alert rules
 │   ├── helm/                  # Helm chart (OCI artifact)
-│   └── csp/                   # Cloud deployment packages (AWS/GCP/Azure/local)
+│   └── packages/              # Cloud deployment packages
+│       ├── aws-eks/           # EKS: Terraform + Helm values + install script
+│       ├── aws-ecs-fargate/   # ECS Fargate: Terraform + install script
+│       ├── gcp-gke/           # GKE: Terraform + Helm values + install script
+│       ├── azure-aks/         # AKS: Terraform + Helm values + install script
+│       └── local-k8s/         # Local: Helm values + install script
+├── docs/                      # Documentation (embedded at build time)
+│   ├── embed.go               # Go embed directive: //go:embed *.md
+│   ├── architecture.md        # This file
+│   ├── user-manual.md         # CLI and admin UI guide
+│   ├── admin-guide.md         # Platform administration guide
+│   ├── cloudfoundry-architecture.md   # CF internals reference
+│   ├── cloudfoundry-vs-microfoundry.md # CF ↔ MF comparison
+│   └── observability-capacity.md      # Monitoring sizing guide
 ├── test/                      # E2E tests (Playwright, 82 cases, 12 suites)
 ├── configs/mf.example.yaml    # Example configuration
-├── docs/                      # Documentation
-├── Makefile                   # Build targets
+├── openapi.yaml               # OpenAPI 3.0 specification
+├── .gitleaks.toml             # Gitleaks secret detection config
+├── .pre-commit-config.yaml    # Pre-commit hooks (gitleaks, hygiene)
+├── .goreleaser.yml            # GoReleaser build config
+├── Dockerfile                 # Container image build
+├── Makefile                   # Build targets (incl. `make hooks`)
 └── CLAUDE.md                  # Agent workflow rules
 ```
 
@@ -631,10 +742,10 @@ This ensures each page's `{{define "content"}}` block is isolated.
 The sidebar is structured into two groups:
 
 **Operations** (all authenticated users):
-- Dashboard, Applications, Services, Secrets
+- Dashboard, Applications, Services, Secrets, Documentation
 
 **Settings** (platform-admin only):
-- Users & Orgs (5-tab IAM: Workspaces, Orgs, Users, Policies, Audit), Clusters, Service Catalog, Registry, Webhooks, SMTP, Endpoints, Metrics & Alerts, Platform
+- Users & Orgs (5-tab IAM: Workspaces, Orgs, Users, Policies, Audit), Workspaces, Clusters, Service Catalog, Registry, Webhooks, SMTP, Endpoints, Metrics & Alerts, Platform
 
 ---
 
@@ -644,6 +755,8 @@ The sidebar is structured into two groups:
 |----------|--------|-----------|
 | No external database | K8s API as data store | Simplicity — no additional infrastructure |
 | embed.FS for templates | Go stdlib | Zero runtime file dependencies |
+| embed.FS for docs | `docs/embed.go` + goldmark | Docs shipped inside binary, always in sync |
+| goldmark | Markdown → HTML rendering | Pure Go, no CGO, used by Hugo/Gitea |
 | Beyla eBPF | Zero-code metrics | Language-agnostic, Netflix-inspired |
 | Viper config | File + env + defaults | Standard Go config pattern |
 | gorilla/sessions | Cookie sessions | Lightweight, no server-side state |
@@ -651,3 +764,5 @@ The sidebar is structured into two groups:
 | HTMX | Partial page updates | No JavaScript build step required |
 | Tailwind CSS (CDN) | Utility-first styling | No CSS build step required |
 | No ORM | Direct K8s API calls | K8s resources are the data model |
+| pre-commit + gitleaks | Git hook secret detection | Prevent accidental credential commits |
+| OpenAPI 3.0 spec | `openapi.yaml` at repo root | Machine-readable API contract |

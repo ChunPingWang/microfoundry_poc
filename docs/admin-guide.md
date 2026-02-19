@@ -16,9 +16,11 @@ Complete guide to the MicroFoundry web-based admin dashboard.
 8. [Cluster Management](#cluster-management)
 9. [Service Catalog](#service-catalog)
 10. [Platform Settings](#platform-settings)
-11. [Users & IAM](#users--iam)
-12. [SCIM v2 API](#scim-v2-api)
-13. [API Reference](#api-reference)
+11. [Platform Configuration](#platform-configuration)
+12. [Documentation](#documentation)
+13. [Users & IAM](#users--iam)
+14. [SCIM v2 API](#scim-v2-api)
+15. [API Reference](#api-reference)
 
 ---
 
@@ -49,7 +51,7 @@ The dashboard serves both HTML pages (for browser UI) and JSON API endpoints (fo
 
 ## Navigation
 
-The sidebar organizes all pages into two groups:
+The sidebar organizes all pages into three groups:
 
 ### Operations (All Authenticated Users)
 
@@ -59,6 +61,8 @@ The sidebar organizes all pages into two groups:
 | **Applications** | `/apps` | List, deploy, scale, delete applications |
 | **Services** | `/services` | Manage provisioned service instances, bind/unbind |
 | **Secrets** | `/secrets` | View and manage Kubernetes secrets |
+
+Workspace-admins and org-admins also see an **IAM** link under Operations for managing their own workspace/org members.
 
 ### Settings (Platform-Admin Only)
 
@@ -72,9 +76,15 @@ The sidebar organizes all pages into two groups:
 | **SMTP** | `/settings/smtp` | Email notification configuration |
 | **Endpoints** | `/settings/endpoints` | Service endpoint URLs (Prometheus, Loki, Grafana, AlertManager) with auto-discovery |
 | **Metrics & Alerts** | `/monitoring` | Prometheus alerts, Grafana dashboards |
-| **Platform** | `/config` | Platform configuration view |
+| **Platform** | `/settings/platform` | DNS, TLS certificates, ingress resources, environment info |
 
-> **Note:** The sidebar adapts to the authenticated user's role. Platform-admins see the full Settings section. Workspace-admins and org-admins see an IAM link under Operations for managing their own workspace/org members. Regular members see Operations only.
+### Resources (All Users)
+
+| Page | URL | Description |
+|------|-----|-------------|
+| **Documentation** | `/docs` | In-app documentation browser: user manual, admin guide, architecture reference |
+
+> **Note:** The sidebar adapts to the authenticated user's role. Platform-admins see the full Settings section. Workspace-admins and org-admins see an IAM link under Operations for managing their own workspace/org members. Regular members see Operations and Resources only.
 
 ---
 
@@ -396,6 +406,155 @@ Configure SMTP for email notifications:
 
 **Test Connection**: `POST /settings/smtp/test` — verifies SMTP connectivity.
 
+### Endpoints
+
+**URL**: `/settings/endpoints`
+
+Configure and monitor URLs for platform infrastructure services. The page auto-discovers services running in the cluster and displays their resolved URLs.
+
+Managed services:
+- **Prometheus** — metrics collection and alerting
+- **Loki** — log aggregation
+- **Grafana** — dashboards and visualization
+- **AlertManager** — alert routing and notification
+
+Each service row shows:
+- Service name and current resolved URL
+- Source badge: **override** (manually set), **ingress** (K8s Ingress discovered), or **internal** (cluster DNS)
+- **Test** button (`POST /settings/endpoints/{name}/test`) — verifies HTTP connectivity to the endpoint
+- **Create Ingress** button (`POST /settings/endpoints/{name}/ingress`) — creates a K8s Ingress resource for external access
+
+Override URLs are entered per-service and saved to K8s ConfigMap:
+- **Save**: `POST /settings/endpoints` — persists URL overrides and hot-swaps in-memory monitoring client URLs
+
+When overrides are saved, the admin server immediately updates its Prometheus, Loki, Grafana, and AlertManager client URLs without requiring a restart.
+
+---
+
+## Platform Configuration
+
+**URL**: `/settings/platform`
+
+The Platform Configuration page (Settings > Platform) provides a read-only overview of the environment's DNS, TLS, ingress, and service endpoint state. It consolidates infrastructure information that is normally spread across `mf.yaml`, Kubernetes resources, and the host system.
+
+### Environment Banner
+
+Displays the detected environment type with contextual guidance:
+
+| Provider | Label | Notes |
+|----------|-------|-------|
+| `docker-desktop` | Local Development — Docker Desktop | Uses hosts file DNS, mkcert TLS |
+| `kind` / `minikube` | Local Development | Uses hosts file DNS, mkcert TLS |
+| `eks` | Production — AWS EKS | External DNS, cert-manager / ACME |
+| `gke` | Production — Google GKE | External DNS, cert-manager / ACME |
+| `aks` | Production — Azure AKS | External DNS, cert-manager / ACME |
+
+Also shows: Kubernetes version, node count, active cluster name.
+
+### DNS Configuration
+
+Domain routing and name resolution details:
+
+- **Base Domain** — the cluster domain (e.g., `cf-local.dev`); apps route as `<app>.<domain>`
+- **Admin Domain** — the admin UI hostname (e.g., `admin.cf-local.dev`)
+- **Auth (OIDC) Domain** — the Keycloak issuer URL
+
+**DNS Resolution Method**:
+- **Local environments**: Domains resolve via the OS hosts file. The path is shown (e.g., `/etc/hosts` or `C:\Windows\System32\drivers\etc\hosts`). Run `mf setup dns` to auto-add entries.
+- **Production environments**: Domains resolve via external DNS (Route53, Cloud DNS) with delegation to the cluster ingress controller.
+
+**Required Hosts File Entries** (local only): A table listing every hostname that has a corresponding Kubernetes Ingress, along with its status (configured or missing).
+
+**Managed entries**: Shows the actual hosts file entries written by `mf setup dns`.
+
+**CoreDNS**: Notes that internal service discovery uses `*.svc.cluster.local` via CoreDNS, while external access uses the nginx Ingress Controller.
+
+### TLS Certificates
+
+Certificate files and Kubernetes TLS secrets for HTTPS:
+
+- **TLS Status**: Enabled/Disabled badge, plus certificate source (mkcert for local, cert-manager/ACME for production)
+- **Certificate Details** (when TLS is enabled):
+  - Certificate file path and key file path
+  - Subject (CN), Issuer
+  - DNS SANs (Subject Alternative Names)
+  - Valid From / Valid Until dates
+- **Kubernetes TLS Secrets**: Checks for the wildcard TLS secret (`mf-tls-wildcard`) in both the app namespace and the `monitoring` namespace, showing Found/Missing status for each.
+- **Secrets at Rest**: Guidance on encrypting K8s Secrets:
+  - Local: base64-only (not encrypted), with instructions for Sealed Secrets and SOPS + age
+  - Production: envelope encryption with cloud KMS (EKS, GKE, AKS)
+
+### Ingress Resources
+
+Lists all Kubernetes Ingress resources across platform namespaces (app namespace and `monitoring`):
+
+| Column | Description |
+|--------|-------------|
+| Name | Ingress resource name |
+| Namespace | K8s namespace |
+| Host | Hostname the ingress routes |
+| TLS | TLS secret name or HTTP indicator |
+| Backend Service | Target service and port |
+| Class | Ingress class (e.g., `nginx`) |
+
+### Platform Service Endpoints
+
+Resolved URLs for monitoring and infrastructure services (Prometheus, Loki, Grafana, AlertManager). Each row shows:
+
+| Column | Description |
+|--------|-------------|
+| Service | Display name |
+| Resolved URL | The URL the admin server uses to reach the service |
+| Source | `override` (manual), `ingress` (auto-discovered), or `internal` (cluster DNS) |
+
+A **Manage Endpoints** link navigates to the Settings > Endpoints page for editing overrides.
+
+### Production DNS Guide
+
+Displayed only on local environments. A step-by-step migration guide:
+
+1. **Create Route53 Hosted Zone** — for your production domain
+2. **Configure DNS Delegation** — NS records and A/CNAME records pointing to the ingress controller load balancer
+3. **Install cert-manager with Let's Encrypt** — deploy a `ClusterIssuer` with ACME for automatic TLS
+4. **Update `mf.yaml`** — change cluster domain, admin domain, and auth issuer URL to production values
+
+---
+
+## Documentation
+
+**URL**: `/docs`
+
+The in-app documentation page provides a browsable library of project documentation rendered from embedded Markdown files. It is accessible to all authenticated users via the **Resources** section in the sidebar.
+
+### Landing Page
+
+When no document is selected (`/docs` with no `?tab=` parameter), the page displays a card grid of all available documents grouped by category:
+
+- **Getting Started**: User Manual, Admin Guide
+- **Architecture**: Architecture overview, CF vs MicroFoundry comparison
+- **Reference**: CF Architecture Reference, Observability & Capacity planning
+
+Each card shows the document title, description, and an icon.
+
+### Document Viewer
+
+Selecting a document (`/docs?tab=<key>`) renders the Markdown content as styled HTML with:
+
+- A sidebar listing all documents (with the current one highlighted)
+- Estimated reading time and word count
+- Full Markdown rendering via goldmark (headings, code blocks, tables, links)
+
+Available documents:
+
+| Key | Title | File |
+|-----|-------|------|
+| `manual` | User Manual | `user-manual.md` |
+| `admin` | Admin Guide | `admin-guide.md` |
+| `architecture` | Architecture | `architecture.md` |
+| `cf-comparison` | CF vs MicroFoundry | `cloudfoundry-vs-microfoundry.md` |
+| `cf-architecture` | CF Architecture Reference | `cloudfoundry-architecture.md` |
+| `capacity` | Observability & Capacity | `observability-capacity.md` |
+
 ---
 
 ## Users & IAM
@@ -601,7 +760,7 @@ All API endpoints return JSON and are available at `/api/...`.
 | GET | `/api/apps/{name}/logs/history` | Query historical logs |
 | POST | `/api/apps/{name}/scale` | Scale application |
 | DELETE | `/api/apps/{name}` | Delete application |
-| GET | `/api/apps/{name}/red-metrics` | Get RED metrics |
+| GET | `/api/apps/{name}/red-metrics` | Get RED metrics (Beyla) |
 | GET | `/api/apps/{name}/health` | Get app health status |
 | GET | `/api/apps/{name}/observability` | Combined observability data |
 
@@ -639,6 +798,8 @@ All API endpoints return JSON and are available at `/api/...`.
 | POST | `/api/settings/webhooks` | Create webhook |
 | DELETE | `/api/settings/webhooks/{id}` | Delete webhook |
 | PUT | `/api/settings/smtp` | Save SMTP config |
+| GET | `/api/settings/endpoints` | Get discovered service endpoints |
+| PUT | `/api/settings/endpoints` | Save endpoint URL overrides |
 
 ### Topology APIs
 
@@ -653,6 +814,20 @@ All API endpoints return JSON and are available at `/api/...`.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/monitoring/alerts` | Get active alerts |
+| GET | `/api/monitoring/health` | Check monitoring stack health |
+
+### Workspace APIs
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/workspaces` | List workspaces |
+| GET | `/api/workspaces/{id}` | Get workspace detail |
+| POST | `/api/workspaces` | Create workspace |
+| DELETE | `/api/workspaces/{id}` | Delete workspace |
+| GET | `/api/workspaces/{id}/members` | List workspace members |
+| POST | `/api/workspaces/{id}/members` | Add workspace member |
+| DELETE | `/api/workspaces/{id}/members/{email}` | Remove workspace member |
+| GET | `/api/workspaces/{id}/orgs` | List organizations in workspace |
 
 ### Organization APIs
 
@@ -661,13 +836,22 @@ All API endpoints return JSON and are available at `/api/...`.
 | GET | `/api/orgs` | List organizations |
 | GET | `/api/orgs/{id}` | Get organization detail |
 | POST | `/api/orgs` | Create organization |
+| DELETE | `/api/orgs/{id}` | Delete organization |
 | GET | `/api/orgs/{id}/members` | List members |
+| POST | `/api/orgs/{id}/members` | Add member |
+| DELETE | `/api/orgs/{id}/members/{email}` | Remove member |
 
 ### IAM APIs
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/users` | List Keycloak users (with `?search=` filter) |
+| POST | `/api/users` | Create Keycloak user |
+| DELETE | `/api/users/{id}` | Delete Keycloak user |
+| POST | `/api/users/{id}/toggle` | Toggle user enabled/disabled |
+| POST | `/api/users/{id}/roles` | Assign realm role to user |
+| DELETE | `/api/users/{id}/roles` | Remove realm role from user |
+| POST | `/api/users/{id}/password` | Reset user password |
 | GET | `/api/policies` | Get all OPA policies (name → Rego source) |
 | PUT | `/api/policies` | Update an OPA policy (JSON: `name`, `source`) |
 | GET | `/api/audit` | Query audit log (`?user=`, `?resource=`, `?action=`) |

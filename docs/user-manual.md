@@ -15,7 +15,10 @@ A complete guide to deploying and managing applications on MicroFoundry — a mi
 7. [Authentication & IAM](#authentication--iam)
 8. [Multi-Cluster Management](#multi-cluster-management)
 9. [Container Registry](#container-registry)
-10. [CLI Reference](#cli-reference)
+10. [TLS Setup](#tls-setup)
+11. [Admin Dashboard](#admin-dashboard)
+12. [Security Tools](#security-tools)
+13. [CLI Reference](#cli-reference)
 
 ---
 
@@ -68,7 +71,7 @@ mf logs hello-world
 
 # 5. Open admin dashboard
 mf admin
-# → http://localhost:8080
+# → http://localhost:8080  (or https://admin.cf-local.dev:8443 after mf setup tls)
 ```
 
 ---
@@ -111,6 +114,8 @@ kubernetes:
       domain: "cf-local.dev"     # App domain (subdomain routing)
       provider: "docker-desktop" # Provider hint
       enabled: true
+      tls: false                 # Set to true after running `mf setup tls`
+      ingress_class: ""          # API gateway: "nginx" (default), "kong", or "traefik"
     # Add more clusters:
     # eks-prod:
     #   context: "arn:aws:eks:us-east-1:..."
@@ -118,6 +123,19 @@ kubernetes:
     #   domain: "apps.example.com"
     #   provider: "eks"
     #   region: "us-east-1"
+    #   ingress_class: "kong"
+
+# Admin server
+admin:
+  port: 8080       # HTTP port (used when TLS is disabled, or for HTTP→HTTPS redirect)
+  host: "0.0.0.0"  # Bind address for the admin server
+  # domain: "admin.cf-local.dev"  # Admin UI domain (set automatically by `mf setup tls`)
+  # tls: true                     # Auto-enable TLS using ~/.mf/cert.pem
+  # tls_port: 8443                # HTTPS port (default: 8443; use 443 for clean URLs)
+
+# Admin UI feature toggles
+ui:
+  tooltips: true  # Show contextual help tooltips on hover (disable with false)
 
 # Monitoring stack endpoints
 monitoring:
@@ -127,14 +145,14 @@ monitoring:
   prometheus_url: "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090"
   beyla_enabled: true
 
-# Container registry (optional — defaults to local build only)
+# Container registry (file-based defaults; admin UI settings stored in K8s take precedence)
 # registry:
 #   url: "harbor.local:30003"
 #   project: "microfoundry"
 #   username: "admin"
 #   insecure: false
 
-# SMTP (optional — for email notifications)
+# SMTP server (file-based defaults; admin UI settings stored in K8s take precedence)
 # smtp:
 #   host: "smtp.gmail.com"
 #   port: 587
@@ -148,13 +166,25 @@ monitoring:
 #   issuer_url: "http://localhost:8180/realms/microfoundry"
 #   client_id: "mf-admin"
 #   client_secret: "your-secret"
-#   redirect_url: "http://localhost:8080/auth/callback"
-#   session_key: ""  # Auto-generated if empty
+#   redirect_url: "https://admin.cf-local.dev:8443/auth/callback"
+#   session_key: ""  # 64-char hex string; auto-generated if empty
 #   admin_base_url: "http://localhost:8180"   # Keycloak Admin API
 #   admin_client_id: "admin-cli"              # Client for Admin REST API
 #   admin_client_secret: "your-admin-secret"  # Client credentials grant
 #   realm: "microfoundry"                     # Keycloak realm name
 ```
+
+### Admin UI Settings Pages
+
+In addition to the YAML config file, several settings can be managed at runtime through the admin dashboard. These settings are stored in Kubernetes ConfigMaps and Secrets (not in files) and take precedence over file-based defaults:
+
+| Settings Page | Path | Description |
+|---------------|------|-------------|
+| **Registry** | `/settings/registry` | Container registry URL, project, credentials, TLS skip, push toggle |
+| **Webhooks** | `/settings/webhooks` | HTTP webhook endpoints for platform event notifications |
+| **SMTP** | `/settings/smtp` | Email server configuration for alerts and notifications |
+| **Endpoints** | `/settings/endpoints` | Override URLs for Prometheus, Grafana, Loki, AlertManager |
+| **Platform** | `/settings/platform` | Read-only view of DNS, TLS certificates, ingresses, and environment info |
 
 ---
 
@@ -244,6 +274,15 @@ mf logs hello-world --recent
 ```bash
 # Scale to 5 instances
 mf scale hello-world -i 5
+
+# Change memory limit (triggers restart)
+mf scale hello-world -m 512M
+
+# Change disk limit
+mf scale hello-world -k 1G
+
+# Combine and force (no restart prompt)
+mf scale hello-world -m 512M -k 1G -f
 ```
 
 ### Deleting an App
@@ -479,14 +518,21 @@ auth:
 
 ### Roles (5-tier RBAC)
 
-Keycloak is configured with a 5-tier role hierarchy:
-- **platform-admin** — full platform access (SCIM, settings, clusters, audit, all workspaces/orgs)
-- **workspace-admin** — manage organizations and members within a workspace
-- **org-admin** — organization administrator (write/delete within org)
-- **member** — organization member (write apps, services, secrets)
-- **viewer** — read-only access to all resources
+Keycloak is configured with a 5-tier role hierarchy. The `mf setup keycloak-realm` command creates these realm roles automatically:
 
-The admin UI sidebar adapts to the authenticated user's role — platform-admins see the full Settings section, while regular members see only the Operations section.
+| Tier | Role | Scope |
+|------|------|-------|
+| 1 | **platform-admin** | Full platform access: SCIM, settings, clusters, audit, all workspaces and orgs |
+| 2 | **workspace-admin** | Manage organizations and members within an assigned workspace |
+| 3 | **org-admin** | Organization administrator — write and delete within their organization |
+| 4 | **org-member** | Organization member — write apps, services, and secrets |
+| 5 | **viewer** | Read-only access to all resources |
+
+The admin UI sidebar adapts to the authenticated user's role:
+
+- **Platform-admins** see the full **Settings** section (Users & Orgs, Clusters, Service Catalog, Registry, Webhooks, SMTP, Endpoints, Metrics & Alerts, Platform).
+- **Workspace-admins** and **org-admins** see an **IAM** link in the Operations section, scoped to their workspace or organization.
+- **Members** and **viewers** see only the Operations section (Dashboard, Applications, Services, Secrets).
 
 ### Workspaces
 
@@ -494,7 +540,7 @@ Workspaces provide a hierarchy level above organizations for multi-tenant platfo
 
 - **Platform → Workspace → Organization → User** hierarchy
 - Workspace-admins can manage organizations and members within their workspace
-- Create workspaces from the admin dashboard (Users & Orgs → Workspaces tab) or CLI (`mf create-workspace`)
+- Create workspaces from the admin dashboard (Users & Orgs → Workspaces tab) or CLI (`mf workspaces create`)
 - Switch active workspace to scope operations
 
 ### Organizations
@@ -522,7 +568,7 @@ InstrumentHandler → InjectUser → OPAMiddleware → Handler
 | Platform admin | Full access to all resources |
 | Authenticated read | Any authenticated user can read any resource |
 | Org admin write | Org admins can write within their organization |
-| Org member write | Members can write apps, services, and secrets only |
+| Org member write | Org-members can write apps, services, and secrets only |
 | SCIM access | Requires platform-admin role |
 | Delete | Requires org admin role (apps, services, secrets) |
 
@@ -624,6 +670,151 @@ Without a registry configured, images remain local (suitable for Docker Desktop 
 
 ---
 
+## TLS Setup
+
+MicroFoundry can serve the admin dashboard and all application ingresses over HTTPS using locally-trusted certificates generated by [mkcert](https://github.com/FiloSottile/mkcert).
+
+### Generate Certificates
+
+```bash
+mf setup tls
+```
+
+This command performs 8 steps:
+
+1. Checks that `mkcert` is installed
+2. Installs the mkcert root CA into the system trust store
+3. Generates a wildcard certificate for `*.<domain>` (e.g., `*.cf-local.dev`)
+4. Creates a TLS secret in the application namespace
+5. Creates a TLS secret in the `monitoring` namespace
+6. Creates a Keycloak ingress route with TLS
+7. Updates the hosts file with `admin.<domain>`, `keycloak.<domain>`, and `grafana.<domain>`
+8. Saves certificates to `~/.mf/cert.pem` and `~/.mf/key.pem` for the admin server
+
+### Enable HTTPS on the Admin Server
+
+After running `mf setup tls`, add the following to your `mf.yaml`:
+
+```yaml
+admin:
+  domain: "admin.cf-local.dev"
+  tls: true
+  tls_port: 8443
+```
+
+Then start the admin server:
+
+```bash
+mf admin
+# → https://admin.cf-local.dev:8443
+```
+
+The admin server auto-detects TLS certificates from `~/.mf/` when `admin.tls` is enabled. When TLS is active, an HTTP-to-HTTPS redirect server also starts on the configured `admin.port` (default 8080).
+
+### Service URLs After TLS Setup
+
+| Service | URL |
+|---------|-----|
+| Admin Dashboard | `https://admin.cf-local.dev:8443` |
+| Keycloak | `https://keycloak.cf-local.dev` |
+| Grafana | `https://grafana.cf-local.dev` |
+| Applications | `https://<app-name>.cf-local.dev` |
+
+---
+
+## Admin Dashboard
+
+The admin dashboard is a web-based UI for managing the MicroFoundry platform. Start it with:
+
+```bash
+mf admin
+# HTTP:  http://localhost:8080
+# HTTPS: https://admin.cf-local.dev:8443  (after mf setup tls)
+```
+
+### Navigation Structure
+
+The sidebar is organized into three sections, with visibility controlled by the authenticated user's role:
+
+**Operations** (visible to all authenticated users):
+
+- **Dashboard** (`/`) — Platform overview: app count, cluster info, quick links
+- **Applications** (`/apps`) — View and manage all deployed applications
+- **Services** (`/services`) — Provisioned backing services: databases, caches, queues
+- **Secrets** (`/secrets`) — Manage application secrets and environment variables
+
+**Settings** (platform-admin only):
+
+- **Users & Orgs** (`/users`) — Workspaces, organizations, Keycloak users, roles, OPA policies, audit log
+- **Clusters** (`/clusters`) — Register and manage Kubernetes clusters
+- **Service Catalog** (`/catalog`) — Browse service plans, configure provisioning topologies, manage visibility
+- **Registry** (`/settings/registry`) — Container registry configuration
+- **Webhooks** (`/settings/webhooks`) — HTTP webhook endpoints for platform events
+- **SMTP** (`/settings/smtp`) — Email server for alerts and notifications
+- **Endpoints** (`/settings/endpoints`) — Override URLs for Prometheus, Grafana, Loki, AlertManager
+- **Metrics & Alerts** (`/monitoring`) — Application metrics, cluster resources, alert management
+- **Platform** (`/settings/platform`) — DNS, TLS certificates, ingresses, and environment info
+
+**Resources** (visible to all users):
+
+- **Documentation** (`/docs`) — Renders project documentation (User Manual, Admin Guide, Architecture) as browsable HTML pages directly within the admin dashboard
+
+### Platform Settings Page
+
+The **Platform** page (`/settings/platform`) is a read-only diagnostics view that shows:
+
+- **Environment** — Provider type (Docker Desktop, EKS, GKE, AKS), Kubernetes version, node count
+- **DNS** — Cluster domain, admin domain, authentication domain
+- **TLS** — Certificate details (subject, DNS names, issuer, validity), TLS secret status in app and monitoring namespaces
+- **Ingresses** — All ingress routes across the application and monitoring namespaces
+- **Hosts File** — Current `/etc/hosts` entries managed by MicroFoundry
+- **Platform Services** — Discovered endpoints for Prometheus, Grafana, Loki, AlertManager with override and ingress status
+
+### Documentation Page
+
+The **Docs** page (`/docs`) serves project Markdown files as rendered HTML. It includes a card-grid landing page and individual document views with reading time and word count. Available documents include the User Manual, Admin Guide, and Architecture reference.
+
+---
+
+## Security Tools
+
+### Pre-Commit Hooks
+
+MicroFoundry includes a `.pre-commit-config.yaml` with security and hygiene hooks that run automatically before each commit.
+
+#### Setup
+
+```bash
+# Using make
+make hooks
+
+# Or manually
+pip install pre-commit
+pre-commit install
+```
+
+#### Run Manually
+
+```bash
+pre-commit run --all-files
+```
+
+#### Included Hooks
+
+| Hook | Source | Description |
+|------|--------|-------------|
+| **gitleaks** | `gitleaks/gitleaks` v8.21.2 | Detects hardcoded secrets (API keys, passwords, tokens) in staged changes |
+| **trailing-whitespace** | `pre-commit-hooks` v5.0.0 | Removes trailing whitespace |
+| **end-of-file-fixer** | `pre-commit-hooks` v5.0.0 | Ensures files end with a newline |
+| **check-yaml** | `pre-commit-hooks` v5.0.0 | Validates YAML syntax (allows multi-document files) |
+| **check-json** | `pre-commit-hooks` v5.0.0 | Validates JSON syntax |
+| **check-merge-conflict** | `pre-commit-hooks` v5.0.0 | Prevents committing merge conflict markers |
+| **detect-private-key** | `pre-commit-hooks` v5.0.0 | Flags private key files that should not be committed |
+
+The **gitleaks** hook is the primary security tool — it scans all staged changes for patterns matching API keys, passwords, connection strings, and other secrets before they reach the repository.
+
+---
+
 ## CLI Reference
 
 ### Application Commands
@@ -634,7 +825,7 @@ Without a registry configured, images remain local (suitable for Docker Desktop 
 | `mf apps` | List all deployed applications | |
 | `mf app [name]` | Show application details | |
 | `mf logs [name]` | Stream application logs | `--recent` fetch history |
-| `mf scale [name]` | Scale application instances | `-i` instances |
+| `mf scale [name]` | Scale instances, memory, and disk | `-i` instances, `-m` memory, `-k` disk, `-f` force |
 | `mf delete [name]` | Delete an application | |
 
 ### Service Commands
@@ -651,31 +842,75 @@ Without a registry configured, images remain local (suitable for Docker Desktop 
 
 ### Secret Commands
 
-| Command | Description |
-|---------|-------------|
-| `mf secrets` | List all secrets |
-| `mf secret [name]` | Show secret details |
-| `mf create-secret <name> k=v...` | Create a user secret |
-| `mf delete-secret [name]` | Delete a secret |
+| Command | Description | Flags |
+|---------|-------------|-------|
+| `mf secrets` | List all secrets | |
+| `mf secret <name>` | Show secret details | `--reveal` show actual values |
+| `mf create-secret <name> k=v...` | Create a user secret | |
+| `mf delete-secret <name>` | Delete a secret | |
 
-### User & Organization Commands
+### Authentication Commands
 
-| Command | Description |
-|---------|-------------|
-| `mf users` | List Keycloak users |
-| `mf create-user <email>` | Create a new user |
-| `mf orgs` | List organizations |
-| `mf create-org <name>` | Create an organization |
-| `mf auth login` | Authenticate via OIDC |
+| Command | Description | Flags |
+|---------|-------------|-------|
+| `mf login` | Authenticate with Keycloak credentials | `-u` username, `-p` password |
+| `mf logout` | Clear stored authentication token | |
+| `mf whoami` | Display current authenticated user and roles | |
+
+### User Management Commands
+
+The `mf users` command group manages Keycloak users via the Admin API. Requires `auth.admin_base_url` in config.
+
+| Command | Description | Flags |
+|---------|-------------|-------|
+| `mf users list` | List all Keycloak users | `--search` filter by username/email |
+| `mf users create` | Create a new user | `--username`, `--email`, `--first-name`, `--last-name`, `--password` |
+| `mf users delete <user-id>` | Delete a user | |
+| `mf users toggle <user-id>` | Enable or disable a user | |
+| `mf users reset-password <user-id>` | Reset a user's password | `--password`, `--temporary` |
+| `mf users roles <user-id>` | List roles assigned to a user | |
+| `mf users assign-role <user-id>` | Assign a realm role to a user | `--role-name`, `--role-id` (optional) |
+| `mf users remove-role <user-id>` | Remove a realm role from a user | `--role-name`, `--role-id` (optional) |
+| `mf users realm-roles` | List all available realm roles | |
+
+### Organization Commands
+
+The `mf orgs` command group manages organizations stored in Kubernetes.
+
+| Command | Description | Flags |
+|---------|-------------|-------|
+| `mf orgs list` | List all organizations | |
+| `mf orgs create` | Create a new organization | `--name`, `--owner`, `--workspace` (optional) |
+| `mf orgs delete <org-id>` | Delete an organization | |
+| `mf orgs members <org-id>` | List members of an organization | |
+| `mf orgs add-member <org-id>` | Add a member to an organization | `--email`, `--name`, `--role` (admin/member/viewer) |
+| `mf orgs remove-member <org-id>` | Remove a member | `--email` |
+| `mf orgs set-role <org-id>` | Change a member's role | `--email`, `--role` |
+
+### Workspace Commands
+
+The `mf workspaces` command group manages workspaces — the hierarchy level above organizations.
+
+| Command | Description | Flags |
+|---------|-------------|-------|
+| `mf workspaces list` | List all workspaces | |
+| `mf workspaces create` | Create a new workspace | `--name`, `--owner` |
+| `mf workspaces delete <ws-id>` | Delete a workspace | |
+| `mf workspaces members <ws-id>` | List members of a workspace | |
+| `mf workspaces add-member <ws-id>` | Add a member to a workspace | `--email`, `--name`, `--role` (admin/member/viewer) |
+| `mf workspaces remove-member <ws-id>` | Remove a member | `--email` |
+| `mf workspaces set-role <ws-id>` | Change a member's role | `--email`, `--role` |
+| `mf workspaces orgs <ws-id>` | List organizations in a workspace | |
 
 ### Platform Commands
 
 | Command | Description | Flags |
 |---------|-------------|-------|
-| `mf admin` | Start the admin web dashboard | `-p` port (default 8080), `--host` bind address |
-| `mf setup keycloak` | Deploy Keycloak | `--admin-user`, `--admin-pass`, `--port` |
-| `mf setup keycloak-realm` | Configure Keycloak realm | `--url`, `--client-secret`, `--redirect-uri` |
-| `mf setup keycloak-idp` | Add identity provider | `--provider`, `--client-id`, `--client-secret` |
+| `mf admin` | Start the admin web dashboard | `-p` port (default 8080), `--host` bind address, `--tls-cert`, `--tls-key` |
+| `mf setup keycloak` | Deploy Keycloak to the active cluster | `--admin-user`, `--admin-pass`, `--client-secret`, `--port` |
+| `mf setup keycloak-realm` | Configure Keycloak realm and client | `--url`, `--admin-user`, `--admin-pass`, `--client-secret`, `--redirect-uri` |
+| `mf setup keycloak-idp` | Add an identity provider (google, github, amazon) | `--provider`, `--client-id`, `--client-secret`, `--url` |
+| `mf setup tls` | Generate locally-trusted TLS certificates with mkcert | |
 | `mf version` | Print version | |
 
 ---
@@ -710,6 +945,7 @@ make tidy               # go mod tidy
 make clean              # Remove build artifacts
 make docker-build       # Build Docker image
 make install            # Install to GOPATH/bin
+make hooks              # Install pre-commit hooks (includes gitleaks)
 make monitoring-install # Deploy monitoring stack
 ```
 
@@ -731,5 +967,6 @@ MicroFoundry maps CloudFoundry concepts to Kubernetes primitives:
 | Doppler/Metrics | Prometheus + Grafana + Beyla eBPF |
 | NATS (Alerts) | AlertManager |
 | UAA | Keycloak OIDC + OPA + SCIM v2 |
+| Org/Space | Workspace → Organization hierarchy |
 | VCAP_SERVICES | Same format — injected via K8s Secrets |
 | manifest.yml | Supported — same format |
