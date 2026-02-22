@@ -47,16 +47,41 @@ MicroFoundry 以 Kubernetes 取代笨重的 BOSH/Diego 運行時，搭配託管�
 
 ### Step 1：建立 Kind 叢集
 
+使用 `extraPortMappings` 將 host 的 port 80/443 直接對應到叢集，讓 Ingress 不需要 port-forward 即可存取。
+
 ```bash
 # 如有舊叢集，先刪除
 kind get clusters
 kind delete cluster --name <cluster-name>
 
-# 建立新叢集
-kind create cluster --name microfoundry
+# 建立叢集（使用專案內建的設定檔）
+kind create cluster --name microfoundry \
+  --config deploy/packages/local-k8s/kind-config.yaml
 
 # 驗證叢集
 kubectl cluster-info --context kind-microfoundry
+```
+
+`kind-config.yaml` 內容：
+
+```yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
 ```
 
 ### Step 2：建置專案
@@ -74,14 +99,18 @@ kind load docker-image ghcr.io/younjinjeong/microfoundry/mf:0.1.0 --name microfo
 
 ### Step 3：安裝 Nginx Ingress Controller
 
+使用 `hostPort` 模式搭配 Kind 的 `extraPortMappings`，讓流量直接進入叢集。
+
 ```bash
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx --create-namespace \
+  --set controller.hostPort.enabled=true \
   --set controller.service.type=ClusterIP \
   --set controller.watchIngressWithoutClass=true \
+  --set-string 'controller.nodeSelector.ingress-ready=true' \
   --wait --timeout 5m
 ```
 
@@ -134,17 +163,7 @@ kubectl logs -n microfoundry deployment/microfoundry --tail=20
 
 ### Step 6：存取管理後台
 
-**方式 A — Port-forward（最快，無需 DNS 設定）**
-
-```bash
-kubectl port-forward -n microfoundry svc/microfoundry 8080:8080
-```
-
-開啟瀏覽器：http://localhost:8080
-
-**方式 B — Ingress（需設定 DNS）**
-
-在 hosts 檔案中加入以下內容：
+在 hosts 檔案中加入 DNS 對應：
 
 - **macOS / Linux**：`/etc/hosts`
 - **Windows**：`C:\Windows\System32\drivers\etc\hosts`
@@ -153,7 +172,18 @@ kubectl port-forward -n microfoundry svc/microfoundry 8080:8080
 127.0.0.1  admin.cf-local.dev cf-local.dev
 ```
 
-開啟瀏覽器：http://admin.cf-local.dev
+透過 `extraPortMappings` + `hostPort`，不需要 port-forward，直接開啟瀏覽器：
+
+- **HTTP**：http://admin.cf-local.dev/
+- **HTTPS**：https://admin.cf-local.dev/ （自簽憑證，瀏覽器會出現警告）
+
+**備用方式 — Port-forward（不使用 extraPortMappings 時）**
+
+```bash
+kubectl port-forward -n microfoundry svc/microfoundry 8080:8080
+```
+
+開啟瀏覽器：http://localhost:8080
 
 ---
 
