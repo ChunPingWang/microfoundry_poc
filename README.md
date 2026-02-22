@@ -114,7 +114,28 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   --wait --timeout 5m
 ```
 
-### Step 4：部署 MicroFoundry
+### Step 4：設定本地 TLS 憑證
+
+`.dev` 網域在瀏覽器的 HSTS 預載清單中，會強制使用 HTTPS。需要用 `mkcert` 產生本地信任的憑證。
+
+```bash
+# 安裝 mkcert（首次使用）
+brew install mkcert nss
+mkcert -install        # 需要 sudo 密碼，將根 CA 加入系統信任儲存庫
+
+# 產生 *.cf-local.dev 的憑證
+mkcert -key-file tls.key -cert-file tls.crt \
+  "admin.cf-local.dev" "*.cf-local.dev" "cf-local.dev"
+
+# 建立 K8s TLS Secret
+kubectl create secret tls mf-tls-wildcard \
+  --cert=tls.crt --key=tls.key -n microfoundry
+
+# 清理本地憑證檔案
+rm tls.crt tls.key
+```
+
+### Step 5：部署 MicroFoundry
 
 ```bash
 # 建立 namespace 並標記為 Helm 管理
@@ -124,7 +145,7 @@ kubectl annotate namespace microfoundry \
   meta.helm.sh/release-name=microfoundry \
   meta.helm.sh/release-namespace=microfoundry
 
-# 使用本地 Helm chart 部署
+# 使用本地 Helm chart 部署（含 TLS 設定）
 helm upgrade --install microfoundry deploy/helm/microfoundry \
   --namespace microfoundry \
   --values deploy/packages/local-k8s/helm-values.yaml \
@@ -137,10 +158,13 @@ helm upgrade --install microfoundry deploy/helm/microfoundry \
   --set 'config.kubernetes.clusters.kind-microfoundry.enabled=true' \
   --set 'config.kubernetes.clusters.kind-microfoundry.ingress_class=nginx' \
   --set image.pullPolicy=Never \
+  --set 'ingress.tls[0].secretName=mf-tls-wildcard' \
+  --set 'ingress.tls[0].hosts[0]=admin.cf-local.dev' \
+  --set 'ingress.tls[0].hosts[1]=*.cf-local.dev' \
   --wait --timeout 5m
 ```
 
-### Step 5：驗證部署
+### Step 6：驗證部署
 
 ```bash
 # 檢查 Pod 狀態（應為 1/1 Running）
@@ -161,7 +185,7 @@ kubectl logs -n microfoundry deployment/microfoundry --tail=20
 [k8s] using in-cluster config (service account)
 ```
 
-### Step 6：存取管理後台
+### Step 7：存取管理後台
 
 在 hosts 檔案中加入 DNS 對應：
 
@@ -172,10 +196,9 @@ kubectl logs -n microfoundry deployment/microfoundry --tail=20
 127.0.0.1  admin.cf-local.dev cf-local.dev
 ```
 
-透過 `extraPortMappings` + `hostPort`，不需要 port-forward，直接開啟瀏覽器：
+透過 `extraPortMappings` + `hostPort` + `mkcert` TLS，不需要 port-forward，直接開啟瀏覽器：
 
-- **HTTP**：http://admin.cf-local.dev/
-- **HTTPS**：https://admin.cf-local.dev/ （自簽憑證，瀏覽器會出現警告）
+- **https://admin.cf-local.dev/** — 本地信任的 HTTPS，無瀏覽器警告
 
 **備用方式 — Port-forward（不使用 extraPortMappings 時）**
 
