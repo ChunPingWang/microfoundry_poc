@@ -47,7 +47,8 @@ func WithEKSCluster(clusterName, region string) ClientOption {
 
 // NewClient creates a K8s client using the best available auth method:
 //  1. EKS IAM auth — if WithEKSCluster option is provided
-//  2. Kubeconfig file — standard local development path
+//  2. In-cluster config — when running inside a Kubernetes pod
+//  3. Kubeconfig file — standard local development path
 func NewClient(kubeContext, namespace, domain string, opts ...ClientOption) (*Client, error) {
 	if namespace == "" {
 		namespace = "microfoundry"
@@ -75,8 +76,15 @@ func NewClient(kubeContext, namespace, domain string, opts ...ClientOption) (*Cl
 		if err != nil {
 			return nil, fmt.Errorf("building EKS config for %q: %w", c.eksClusterName, err)
 		}
+	} else if _, statErr := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/token"); statErr == nil {
+		// Path 2: in-cluster config (running inside a Kubernetes pod)
+		log.Printf("[k8s] using in-cluster config (service account)")
+		restConfig, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("loading in-cluster config: %w", err)
+		}
 	} else {
-		// Path 2: kubeconfig file (local dev, mounted kubeconfig)
+		// Path 3: kubeconfig file (local dev, mounted kubeconfig)
 		restConfig, err = buildKubeconfigConfig(kubeContext)
 		if err != nil {
 			return nil, err

@@ -1,125 +1,171 @@
 # MicroFoundry
 
-[![CI](https://github.com/younjinjeong/microfoundry/actions/workflows/ci.yml/badge.svg?branch=rc)](https://github.com/younjinjeong/microfoundry/actions/workflows/ci.yml)
-[![Release](https://github.com/younjinjeong/microfoundry/actions/workflows/release.yml/badge.svg)](https://github.com/younjinjeong/microfoundry/releases)
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v0.2.0-blue.svg)](https://github.com/younjinjeong/microfoundry/releases/tag/v0.2.0)
 
-**A micro CloudFoundry for Kubernetes** — lightweight PaaS that preserves the CloudFoundry developer experience while running on cloud-native infrastructure.
+**輕量級 Kubernetes PaaS 平台** — 保留 CloudFoundry 開發者體驗，底層運行在雲原生基礎設施上。
 
-MicroFoundry replaces the heavyweight BOSH/Diego runtime with Kubernetes, managed cloud services, and modern observability. The result: `cf push`-style deployments, service binding, and logging — all backed by Kubernetes, Prometheus, Loki, and Grafana Beyla.
-
-> **Built with AI** — Developed through a structured Human-AI workflow using [Claude Code](https://claude.ai/claude-code) with a 7-agent review process. See [Development Workflow](docs/development-workflow.md) for details. AI agents can read [`ai/AGENTS.md`](ai/AGENTS.md) for fast onboarding.
+MicroFoundry 以 Kubernetes 取代笨重的 BOSH/Diego 運行時，搭配託管雲服務與現代可觀測性工具。實現 `cf push` 風格的部署、服務綁定與日誌串流 — 全部由 Kubernetes、Prometheus、Loki 和 Grafana Beyla 驅動。
 
 ---
 
-## Why MicroFoundry?
+## 為什麼選擇 MicroFoundry？
 
-| Problem | Solution |
-|---|---|
-| **CF is too heavy** — BOSH + Diego + 20+ VMs | **Single Go binary** on any K8s cluster |
-| **Losing CF developer experience** when moving to K8s | **`mf push` works like `cf push`** — same workflow, K8s underneath |
-| **Observability requires code changes** | **Zero-code eBPF metrics** via Grafana Beyla |
-| **No platform visibility** without multiple tools | **Built-in admin dashboard** — 48 templates, all server-rendered |
-| **IAM is bolted on** — separate auth/authz systems | **Keycloak + OPA + SCIM v2** with OIDC federation to AWS/GCP/Azure |
-| **Multi-cluster is hard** | **One control plane** — Docker Desktop, EKS, GKE, AKS |
+| 問題 | 解決方案 |
+|------|----------|
+| **CF 太重** — BOSH + Diego + 20 多台 VM | **單一 Go 二進位檔**，任何 K8s 叢集皆可運行 |
+| **遷移到 K8s 後失去 CF 開發體驗** | **`mf push` 如同 `cf push`** — 相同工作流程，底層為 K8s |
+| **可觀測性需要修改程式碼** | **零程式碼 eBPF 指標**，透過 Grafana Beyla |
+| **缺乏平台能見度** | **內建管理後台** — 48 個模板，全部伺服器端渲染 |
+| **IAM 外掛式整合** | **Keycloak + OPA + SCIM v2**，OIDC 聯邦至 AWS/GCP/Azure |
+| **多叢集管理困難** | **單一控制平面** — Docker Desktop、EKS、GKE、AKS |
 
-**Key features:**
+**主要功能：**
 
-- **56 backing services** — 10 local K8s + 21 AWS + 12 GCP + 13 Azure, each with 3 plans
-- **OIDC CSP federation** — Keycloak-brokered temporary credentials for AWS STS, GCP WIF, Azure FIC
-- **5-tier RBAC** — platform-admin → workspace-admin → org-admin → member → viewer
-- **MCP Server** — AI tools (Claude, Cursor) deploy and manage apps directly
-- **Cloud deployment packages** — Terraform blueprints for EKS, ECS Fargate, GKE, AKS, local K8s
-- **Cross-platform release** — GoReleaser for Linux/macOS/Windows, multi-arch Docker, Helm OCI
+- **56 個後端服務** — 10 個本地 K8s + 21 個 AWS + 12 個 GCP + 13 個 Azure，每個服務 3 種方案
+- **OIDC CSP 聯邦** — 透過 Keycloak 代理的臨時憑證（AWS STS、GCP WIF、Azure FIC）
+- **5 層 RBAC** — platform-admin → workspace-admin → org-admin → member → viewer
+- **MCP Server** — AI 工具（Claude、Cursor）可直接部署和管理應用程式
+- **雲端部署套件** — EKS、ECS Fargate、GKE、AKS、本地 K8s 的 Terraform 藍圖
+- **跨平台發佈** — GoReleaser 支援 Linux/macOS/Windows，多架構 Docker，Helm OCI
 
 ---
 
-## Quick Start
+## Kind 本地部署指南
 
-### Prerequisites
+以下為在 Kind 叢集上完整安裝與驗證 MicroFoundry 的步驟。
 
-- Go 1.25+, Docker Desktop with Kubernetes, kubectl, Helm 3
+### 前置需求
 
-### Build & Deploy
+| 工具 | 最低版本 | 安裝方式 |
+|------|----------|----------|
+| Go | 1.25+ | `brew install go` |
+| Docker | 最新版 | [Docker Desktop](https://www.docker.com/products/docker-desktop/) 或 [Rancher Desktop](https://rancherdesktop.io/) |
+| Kind | 0.20+ | `brew install kind` |
+| kubectl | 1.27+ | `brew install kubectl` |
+| Helm | 3.12+ | `brew install helm` |
+
+### Step 1：建立 Kind 叢集
 
 ```bash
-make build                               # Build to bin/mf
-make monitoring-install                  # Prometheus + Grafana + Loki + Beyla
-mf push hello-world                      # Deploy from source
-mf create-service postgresql small my-db # Provision a database
-mf bind-service hello-world my-db        # Bind DB → app (VCAP_SERVICES)
-mf admin                                 # Open dashboard at :8443
+# 如有舊叢集，先刪除
+kind get clusters
+kind delete cluster --name <cluster-name>
+
+# 建立新叢集
+kind create cluster --name microfoundry
+
+# 驗證叢集
+kubectl cluster-info --context kind-microfoundry
 ```
 
-### Authentication (Optional)
+### Step 2：建置專案
 
 ```bash
-mf setup keycloak                        # Deploy Keycloak
-mf setup keycloak-realm --url http://localhost:8180
-# Add auth config to configs/mf.yaml, restart mf admin
+# 建置 Go binary
+make build
+
+# 建置 Docker image
+docker build -t ghcr.io/younjinjeong/microfoundry/mf:0.1.0 .
+
+# 載入 image 到 Kind 叢集
+kind load docker-image ghcr.io/younjinjeong/microfoundry/mf:0.1.0 --name microfoundry
 ```
 
-### Configuration
+### Step 3：安裝 Nginx Ingress Controller
 
 ```bash
-cp configs/mf.example.yaml configs/mf.yaml
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace \
+  --set controller.service.type=ClusterIP \
+  --set controller.watchIngressWithoutClass=true \
+  --wait --timeout 5m
 ```
 
-```yaml
-kubernetes:
-  active: "docker-desktop"
-  clusters:
-    docker-desktop:
-      context: "docker-desktop"
-      namespace: "microfoundry"
-      domain: "cf-local.dev"
-      provider: "docker-desktop"
-    eks-prod:
-      context: "arn:aws:eks:us-west-2:..."
-      namespace: "microfoundry"
-      domain: "apps.example.com"
-      provider: "eks"
+### Step 4：部署 MicroFoundry
+
+```bash
+# 建立 namespace 並標記為 Helm 管理
+kubectl create namespace microfoundry
+kubectl label namespace microfoundry app.kubernetes.io/managed-by=Helm
+kubectl annotate namespace microfoundry \
+  meta.helm.sh/release-name=microfoundry \
+  meta.helm.sh/release-namespace=microfoundry
+
+# 使用本地 Helm chart 部署
+helm upgrade --install microfoundry deploy/helm/microfoundry \
+  --namespace microfoundry \
+  --values deploy/packages/local-k8s/helm-values.yaml \
+  --set config.kubernetes.active=kind-microfoundry \
+  --set 'config.kubernetes.clusters.kind-microfoundry.name=kind-microfoundry' \
+  --set 'config.kubernetes.clusters.kind-microfoundry.context=kind-microfoundry' \
+  --set 'config.kubernetes.clusters.kind-microfoundry.namespace=microfoundry' \
+  --set 'config.kubernetes.clusters.kind-microfoundry.domain=cf-local.dev' \
+  --set 'config.kubernetes.clusters.kind-microfoundry.provider=kind' \
+  --set 'config.kubernetes.clusters.kind-microfoundry.enabled=true' \
+  --set 'config.kubernetes.clusters.kind-microfoundry.ingress_class=nginx' \
+  --set image.pullPolicy=Never \
+  --wait --timeout 5m
 ```
+
+### Step 5：驗證部署
+
+```bash
+# 檢查 Pod 狀態（應為 1/1 Running）
+kubectl get pods -n microfoundry
+
+# 檢查服務
+kubectl get svc -n microfoundry
+
+# 檢查 Ingress
+kubectl get ingress -n microfoundry
+
+# 查看日誌，確認 in-cluster config 正常
+kubectl logs -n microfoundry deployment/microfoundry --tail=20
+```
+
+預期輸出應包含：
+```
+[k8s] using in-cluster config (service account)
+```
+
+### Step 6：存取管理後台
+
+**方式 A — Port-forward（最快，無需 DNS 設定）**
+
+```bash
+kubectl port-forward -n microfoundry svc/microfoundry 8080:8080
+```
+
+開啟瀏覽器：http://localhost:8080
+
+**方式 B — Ingress（需設定 DNS）**
+
+在 hosts 檔案中加入以下內容：
+
+- **macOS / Linux**：`/etc/hosts`
+- **Windows**：`C:\Windows\System32\drivers\etc\hosts`
+
+```
+127.0.0.1  admin.cf-local.dev cf-local.dev
+```
+
+開啟瀏覽器：http://admin.cf-local.dev
 
 ---
 
-## Admin Dashboard
+## 管理後台
 
-The built-in dashboard (`mf admin`) provides application lifecycle, service catalog, multi-cluster management, observability, secrets, IAM, and platform settings in one interface.
+內建管理後台（`mf admin`）提供應用程式生命週期管理、服務目錄、多叢集管理、可觀測性、密鑰管理、IAM 和平台設定。
 
-<p align="center">
-  <img src="docs/images/dashboard-walkthrough.gif" alt="MicroFoundry Admin Dashboard Walkthrough" width="900">
-</p>
-
-<details>
-<summary><strong>Screenshots</strong> (click to expand)</summary>
-<br>
-
-| Dashboard | Applications | Service Catalog |
-|:---------:|:------------:|:---------------:|
-| <img src="docs/images/dashboard.png" alt="Dashboard" width="280"> | <img src="docs/images/apps-list.png" alt="Applications" width="280"> | <img src="docs/images/catalog.png" alt="Catalog" width="280"> |
-
-| Users & IAM | Workspaces | Clusters |
-|:-----------:|:----------:|:--------:|
-| <img src="docs/images/users-iam.png" alt="Users & IAM" width="280"> | <img src="docs/images/workspaces.png" alt="Workspaces" width="280"> | <img src="docs/images/clusters.png" alt="Clusters" width="280"> |
-
-| Monitoring & Alerts | Services | Secrets |
-|:-------------------:|:--------:|:-------:|
-| <img src="docs/images/monitoring.png" alt="Monitoring" width="280"> | <img src="docs/images/services.png" alt="Services" width="280"> | <img src="docs/images/secrets.png" alt="Secrets" width="280"> |
-
-| Service Endpoints | Registry Settings | Platform Config |
-|:-----------------:|:-----------------:|:---------------:|
-| <img src="docs/images/settings-endpoints.png" alt="Endpoints" width="280"> | <img src="docs/images/settings-registry.png" alt="Registry" width="280"> | <img src="docs/images/config.png" alt="Config" width="280"> |
-
-</details>
-
-**Admin pages:** Dashboard, Applications, Services, Secrets, Users & Orgs (5-tab IAM), Clusters, Service Catalog, Registry, Webhooks, SMTP, Endpoints, Cloud Providers, Metrics & Alerts, Platform, Documentation
+**管理頁面：** Dashboard、Applications、Services、Secrets、Users & Orgs（5 分頁 IAM）、Clusters、Service Catalog、Registry、Webhooks、SMTP、Endpoints、Cloud Providers、Metrics & Alerts、Platform、Documentation
 
 ---
 
-## Architecture
+## 架構
 
 ```
                           ┌─────────────────────────────────┐
@@ -154,138 +200,213 @@ The built-in dashboard (`mf admin`) provides application lifecycle, service cata
             └───────────────┘       └───────────────┘      └───────────────┘
 ```
 
-For detailed architecture, multi-cluster runtime, and component design, see [Architecture](docs/architecture.md).
+詳細架構設計請參閱 [Architecture](docs/architecture.md)。
 
 ---
 
-## Service Catalog
+## 服務目錄
 
-56 backing services across 4 providers, each with 3 plans (small / medium / large):
+56 個後端服務，橫跨 4 個供應商，每個服務提供 3 種方案（small / medium / large）：
 
-| Provider | Count | Services |
-|----------|-------|----------|
-| **Local K8s** | 10 | MariaDB, PostgreSQL, ClickHouse, Redis, Memcached, RabbitMQ, ActiveMQ, MinIO, Kong, Nginx |
-| **AWS** | 21 | RDS (PostgreSQL, MySQL, MariaDB), Aurora, DynamoDB, DocumentDB, Redshift, ElastiCache, SQS, SNS, MQ, MSK, Kinesis, S3, OpenSearch, Bedrock, SageMaker, MediaConvert, IVS |
-| **GCP** | 12 | Cloud SQL (PostgreSQL, MySQL), AlloyDB, Spanner, Firestore, Bigtable, BigQuery, Memorystore, Pub/Sub, Cloud Storage, Vertex AI, Transcoder |
-| **Azure** | 13 | Database (PostgreSQL, MySQL), SQL Database, Cosmos DB, Synapse, Cache for Redis, Service Bus, Event Hubs, Blob Storage, AI Search, Azure OpenAI, ML, Media Services |
+| 供應商 | 數量 | 服務 |
+|--------|------|------|
+| **本地 K8s** | 10 | MariaDB、PostgreSQL、ClickHouse、Redis、Memcached、RabbitMQ、ActiveMQ、MinIO、Kong、Nginx |
+| **AWS** | 21 | RDS（PostgreSQL、MySQL、MariaDB）、Aurora、DynamoDB、DocumentDB、Redshift、ElastiCache、SQS、SNS、MQ、MSK、Kinesis、S3、OpenSearch、Bedrock、SageMaker、MediaConvert、IVS |
+| **GCP** | 12 | Cloud SQL（PostgreSQL、MySQL）、AlloyDB、Spanner、Firestore、Bigtable、BigQuery、Memorystore、Pub/Sub、Cloud Storage、Vertex AI、Transcoder |
+| **Azure** | 13 | Database（PostgreSQL、MySQL）、SQL Database、Cosmos DB、Synapse、Cache for Redis、Service Bus、Event Hubs、Blob Storage、AI Search、Azure OpenAI、ML、Media Services |
 
 ```bash
-mf catalog                                # List all services
-mf create-service postgresql small my-db  # Provision
-mf bind-service hello-world my-db         # Bind → VCAP_SERVICES
+mf catalog                                # 列出所有服務
+mf create-service postgresql small my-db  # 建立服務
+mf bind-service hello-world my-db         # 綁定服務 → VCAP_SERVICES
 ```
 
-Cloud providers support **OIDC federation** via Keycloak — no static credentials needed. See [Admin Guide](docs/admin-guide.md) for setup.
+雲端供應商支援透過 Keycloak 的 **OIDC 聯邦** — 無需靜態憑證。詳見 [Admin Guide](docs/admin-guide.md)。
 
 ---
 
-## CLI Commands
+## CLI 指令
 
-| Command | Description |
-|---|---|
-| `mf push [app]` | Build + deploy from source (Dockerfile or CNB) |
-| `mf apps` / `mf app [name]` | List apps / show app details |
-| `mf logs [app]` | Stream or fetch application logs |
-| `mf scale [app] -i N` | Scale application instances |
-| `mf delete [app]` | Delete app and clean up routes |
-| `mf catalog` | List available services by provider |
-| `mf create-service` / `mf delete-service` | Provision / delete a backing service |
-| `mf services` / `mf bind-service` / `mf unbind-service` | List / bind / unbind services |
-| `mf secrets` / `mf create-secret` / `mf delete-secret` | Manage secrets |
-| `mf admin` | Start web dashboard |
-| `mf setup keycloak` / `keycloak-realm` / `keycloak-idp` | Authentication setup |
-| `mf users` / `mf create-user` | Keycloak user management |
-| `mf orgs` / `mf create-org` | Organization management |
-| `mf auth login` | OIDC authentication |
+| 指令 | 說明 |
+|------|------|
+| `mf push [app]` | 從原始碼建置並部署（Dockerfile 或 CNB） |
+| `mf apps` / `mf app [name]` | 列出應用程式 / 顯示應用程式詳情 |
+| `mf logs [app]` | 串流或取得應用程式日誌 |
+| `mf scale [app] -i N` | 擴縮應用程式實例 |
+| `mf delete [app]` | 刪除應用程式並清理路由 |
+| `mf catalog` | 依供應商列出可用服務 |
+| `mf create-service` / `mf delete-service` | 建立 / 刪除後端服務 |
+| `mf services` / `mf bind-service` / `mf unbind-service` | 列出 / 綁定 / 解除綁定服務 |
+| `mf secrets` / `mf create-secret` / `mf delete-secret` | 管理密鑰 |
+| `mf admin` | 啟動管理後台 |
+| `mf setup keycloak` / `keycloak-realm` / `keycloak-idp` | 認證設定 |
+| `mf users` / `mf create-user` | Keycloak 使用者管理 |
+| `mf orgs` / `mf create-org` | 組織管理 |
+| `mf auth login` | OIDC 認證 |
 
 ### MCP Server
 
-9 tools for AI integration: `mf_push`, `mf_apps`, `mf_logs`, `mf_scale`, `mf_delete`, `mf_create_service`, `mf_bind_service`, `mf_routes`, `mf_env`
+9 個 AI 整合工具：`mf_push`、`mf_apps`、`mf_logs`、`mf_scale`、`mf_delete`、`mf_create_service`、`mf_bind_service`、`mf_routes`、`mf_env`
 
 ---
 
-## Cloud Deployment
+## 雲端部署
 
-Terraform deployment packages for all major providers. Cost-optimized defaults — if MicroFoundry goes down, existing apps keep running on K8s.
+提供所有主要雲端供應商的 Terraform 部署套件。預設成本最佳化 — 即使 MicroFoundry 停機，現有應用程式仍在 K8s 上持續運行。
 
-| Platform | Architecture | Estimated Cost |
-|---|---|---|
-| **AWS ECS Fargate + EKS** | Fargate control plane + EKS workloads | ~$108/month |
-| **AWS ECS Fargate only** | Connect to existing EKS cluster | ~$20/month |
-| **AWS EKS** | Helm install on EKS | Depends on cluster |
-| **GCP GKE** | Helm install on GKE Autopilot/Standard | Depends on cluster |
-| **Azure AKS** | Helm install on AKS | Depends on cluster |
-| **Local K8s** | Docker Desktop / kind / minikube | Free |
+| 平台 | 架構 | 預估費用 |
+|------|------|----------|
+| **AWS ECS Fargate + EKS** | Fargate 控制平面 + EKS 工作負載 | 約 $108/月 |
+| **AWS ECS Fargate only** | 連接現有 EKS 叢集 | 約 $20/月 |
+| **AWS EKS** | Helm 安裝至 EKS | 依叢集而定 |
+| **GCP GKE** | Helm 安裝至 GKE Autopilot/Standard | 依叢集而定 |
+| **Azure AKS** | Helm 安裝至 AKS | 依叢集而定 |
+| **本地 K8s** | Docker Desktop / Kind / minikube | 免費 |
 
-See [deploy/packages/](deploy/packages/) for detailed setup guides per provider.
-
----
-
-## Tech Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| **Language** | Go 1.25 | API server, CLI, MCP server |
-| **CLI** | Cobra + Viper | Commands + configuration |
-| **Runtime** | Kubernetes | Scheduling and orchestration |
-| **Build** | Cloud Native Buildpacks | Source-to-container builds |
-| **Ingress** | Kong / Nginx / Traefik / AWS API GW | Pluggable gateway with WebSocket/gRPC |
-| **TLS** | mkcert | Local HTTPS with `.dev` domains |
-| **Metrics** | Prometheus + Grafana + Beyla (eBPF) | Zero-code auto-instrumented metrics |
-| **Logs** | Promtail + Loki | Log aggregation |
-| **Auth** | Keycloak + go-oidc + OPA | OIDC + Rego policies + SCIM v2 |
-| **UI** | Go templates + HTMX + Tailwind CSS | Server-rendered, no JS build step |
-| **IaC** | Terraform | Cloud resource provisioning |
-| **AI** | Model Context Protocol (MCP) | AI tool integration |
-| **CSP** | AWS STS + GCP WIF + Azure FIC | OIDC credential federation |
-| **Security** | gitleaks + pre-commit | Secret detection |
+詳見 [deploy/packages/](deploy/packages/) 各供應商的部署指南。
 
 ---
 
-## Documentation
-
-All docs are also available through the **in-app docs viewer** at `/docs` in the admin dashboard.
-
-| Document | Description |
-|----------|-------------|
-| [User Manual](docs/user-manual.md) | Deploying and managing applications |
-| [Architecture](docs/architecture.md) | Technical design and project structure |
-| [Admin Guide](docs/admin-guide.md) | Dashboard pages and API reference (100+ endpoints) |
-| [Development Workflow](docs/development-workflow.md) | Human-AI collaborative development process |
-| [CF vs MicroFoundry](docs/cloudfoundry-vs-microfoundry.md) | Component-by-component comparison |
-| [CF Architecture](docs/cloudfoundry-architecture.md) | CloudFoundry reference architecture |
-| [Observability & Capacity](docs/observability-capacity.md) | Monitoring and capacity planning |
-| [Changelog](CHANGELOG.md) | Development history and releases |
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch from `rc` (not `main`)
-3. Make your changes
-4. Submit a PR targeting `rc`
-
-This project uses a structured AI-assisted workflow. See [CLAUDE.md](CLAUDE.md) for branch strategy and conventions, and [Development Workflow](docs/development-workflow.md) for the full process.
+## 監控堆疊（選用）
 
 ```bash
-make hooks              # Install pre-commit hooks
-go build ./...          # Must pass
-go vet ./...            # Must pass
-go test ./...           # Run tests
+# 透過安裝腳本安裝
+bash deploy/packages/local-k8s/install.sh --with-monitoring
+
+# 或手動安裝
+bash deploy/monitoring/install.sh
+```
+
+### 監控服務存取
+
+| 服務 | Port-forward 指令 |
+|------|-------------------|
+| Grafana | `kubectl port-forward -n monitoring svc/kube-prometheus-grafana 3000:80` |
+| Prometheus | `kubectl port-forward -n monitoring svc/kube-prometheus-kube-prome-prometheus 9090:9090` |
+| Alertmanager | `kubectl port-forward -n monitoring svc/kube-prometheus-kube-prome-alertmanager 9093:9093` |
+
+預設 Grafana 帳號密碼：**admin** / **microfoundry**
+
+---
+
+## 認證設定（Keycloak）
+
+MicroFoundry 使用 Keycloak 作為 OIDC 身份提供者。
+
+```bash
+# 部署 Keycloak
+mf setup keycloak
+
+# 設定 Realm
+mf setup keycloak-realm --url http://localhost:8180
+```
+
+編輯設定檔（`~/.mf/mf.yaml`）並啟用 auth 區段：
+
+```yaml
+auth:
+  enabled: true
+  issuer_url: "http://localhost:8180/realms/microfoundry"
+  client_id: "mf-admin"
+  client_secret: "<從 Keycloak 管理介面取得>"
+  redirect_url: "http://admin.cf-local.dev:8080/auth/callback"
+  realm: "microfoundry"
+```
+
+重新啟動 MicroFoundry 使設定生效：
+
+```bash
+kubectl rollout restart deployment/microfoundry -n microfoundry
 ```
 
 ---
 
-## Release
+## 技術堆疊
 
-| Version | Tag | Description |
-|---------|-----|-------------|
-| **v0.2.0** | [`v0.2.0`](https://github.com/younjinjeong/microfoundry/releases/tag/v0.2.0) | Multi-cloud service catalog (56 services), OIDC CSP federation, README redesign |
-| **v0.1.0** | [`v0.1.0`](https://github.com/younjinjeong/microfoundry/releases/tag/v0.1.0) | First release — GoReleaser, multi-arch Docker, Helm OCI, 5 cloud deployment packages |
+| 層級 | 技術 | 用途 |
+|------|------|------|
+| **語言** | Go 1.25 | API 伺服器、CLI、MCP Server |
+| **CLI** | Cobra + Viper | 指令與設定管理 |
+| **執行環境** | Kubernetes | 排程與編排 |
+| **建置** | Cloud Native Buildpacks | 原始碼到容器映像檔 |
+| **Ingress** | Kong / Nginx / Traefik / AWS API GW | 可插拔閘道器，支援 WebSocket/gRPC |
+| **TLS** | mkcert | 本地 HTTPS，`.dev` 網域 |
+| **指標** | Prometheus + Grafana + Beyla (eBPF) | 零程式碼自動化指標蒐集 |
+| **日誌** | Promtail + Loki | 日誌聚合 |
+| **認證** | Keycloak + go-oidc + OPA | OIDC + Rego 政策 + SCIM v2 |
+| **UI** | Go templates + HTMX + Tailwind CSS | 伺服器端渲染，無 JS 建置步驟 |
+| **IaC** | Terraform | 雲端資源供應 |
+| **AI** | Model Context Protocol (MCP) | AI 工具整合 |
+| **CSP** | AWS STS + GCP WIF + Azure FIC | OIDC 憑證聯邦 |
 
 ---
 
-## License
+## 解除安裝
+
+```bash
+# 移除 MicroFoundry
+helm uninstall microfoundry -n microfoundry
+kubectl delete namespace microfoundry
+
+# 移除監控（如已安裝）
+helm uninstall kube-prometheus -n monitoring
+helm uninstall loki -n monitoring
+kubectl delete namespace monitoring
+
+# 移除 nginx ingress controller
+helm uninstall ingress-nginx -n ingress-nginx
+kubectl delete namespace ingress-nginx
+
+# 刪除 Kind 叢集
+kind delete cluster --name microfoundry
+```
+
+---
+
+## 疑難排解
+
+**Pod 卡在 Pending 狀態**
+- 檢查資源限制：`kubectl describe pod -n microfoundry`
+- 確保 Docker 分配足夠的 CPU 和記憶體（建議：4 CPU、8 GB RAM）
+
+**Ingress 無法運作**
+- 確認 ingress controller 正在運行：`kubectl get pods -n ingress-nginx`
+- 檢查 ingress 資源：`kubectl get ingress -n microfoundry`
+- 確認 hosts 檔案已正確設定
+
+**Pod 因 kubeconfig 錯誤重啟**
+- 確認 Pod 日誌中出現 `using in-cluster config (service account)`
+- 若出現 `loading kubeconfig: stat /root/.kube/config: no such file or directory`，表示 in-cluster config 未正確啟用
+
+**無法拉取映像檔**
+- Kind 部署時使用 `kind load docker-image` 載入本地映像檔
+- Helm values 設定 `image.pullPolicy=Never`
+
+---
+
+## 文件
+
+| 文件 | 說明 |
+|------|------|
+| [User Manual](docs/user-manual.md) | 部署與管理應用程式 |
+| [Architecture](docs/architecture.md) | 技術設計與專案結構 |
+| [Admin Guide](docs/admin-guide.md) | 管理後台頁面與 API 參考（100+ 端點） |
+| [Development Workflow](docs/development-workflow.md) | Human-AI 協作開發流程 |
+| [Observability & Capacity](docs/observability-capacity.md) | 監控與容量規劃 |
+
+---
+
+## 貢獻
+
+```bash
+make hooks              # 安裝 pre-commit hooks
+go build ./...          # 必須通過
+go vet ./...            # 必須通過
+go test ./...           # 執行測試
+```
+
+---
+
+## 授權
 
 See [LICENSE](LICENSE).
